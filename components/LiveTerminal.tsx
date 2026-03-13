@@ -83,8 +83,8 @@ const MAX_LINES = 60;
 
 export default function LiveTerminal() {
   const [lines, setLines] = useState<TerminalLine[]>([]);
-  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
-  const [active, setActive] = useState(true);
+  const seenIdsRef = useRef<Set<string>>(new Set()); // ref avoids stale closure in poll loop
+  const activeRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineQueueRef = useRef<TerminalLine[]>([]);
   const typingRef = useRef(false);
@@ -141,13 +141,12 @@ export default function LiveTerminal() {
         if (!res.ok) return;
         const { events }: { events: ActivityEvent[] } = await res.json();
 
-        const newEvents = events.filter(e => !seenIds.has(e.id));
+        const newEvents = events.filter(e => !seenIdsRef.current.has(e.id));
         if (newEvents.length > 0) {
-          const newIds = new Set(seenIds);
           const newLines: TerminalLine[] = [];
 
           for (const event of newEvents) {
-            newIds.add(event.id);
+            seenIdsRef.current.add(event.id); // mutate ref directly — no stale closure
             const rendered = renderLines(event);
             rendered.forEach((rl, i) => {
               newLines.push({
@@ -162,21 +161,20 @@ export default function LiveTerminal() {
             newLines.push({ key: `${event.id}-sep`, text: "", color: undefined, visible: "", done: true });
           }
 
-          setSeenIds(newIds);
           lineQueueRef.current.push(...newLines);
           runTypewriter();
         }
       } catch {
         // Non-fatal
       } finally {
-        if (active) timer = setTimeout(poll, POLL_INTERVAL);
+        if (activeRef.current) timer = setTimeout(poll, POLL_INTERVAL);
       }
     }
 
     poll();
     return () => {
+      activeRef.current = false;
       clearTimeout(timer);
-      setActive(false);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
