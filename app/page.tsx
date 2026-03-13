@@ -94,7 +94,7 @@ export default function Home() {
                 rune: "ᚠ",
                 step: "01",
                 title: "Agent writes memory",
-                desc: "Content encrypted via Lit Protocol. Only your wallet can decrypt. Encrypted blob stored permanently on Filecoin.",
+                desc: "Content encrypted via Lit Protocol to the agent's wallet. Only that agent can decrypt. Encrypted blob stored permanently on Filecoin.",
                 color: "#00a8ff",
               },
               {
@@ -135,8 +135,10 @@ export default function Home() {
             <h3 className="text-xs tracking-widest text-gray-500 mb-4 uppercase">API — Any agent, any language</h3>
             <div className="space-y-2 font-mono text-sm">
               <div><span style={{ color: "#00a8ff" }}>POST</span> <span className="text-gray-300">/api/remember</span> <span className="text-gray-600 text-xs">— encrypt + store → CID</span></div>
+              <div><span style={{ color: "#14b8a6" }}>GET</span> <span className="text-gray-300">/api/recall/challenge</span> <span className="text-gray-600 text-xs">— get SIWE message to sign</span></div>
               <div><span style={{ color: "#14b8a6" }}>POST</span> <span className="text-gray-300">/api/recall</span> <span className="text-gray-600 text-xs">— fetch + decrypt → content</span></div>
               <div><span style={{ color: "#f59e0b" }}>POST</span> <span className="text-gray-300">/api/revoke</span> <span className="text-gray-600 text-xs">— seal agent access</span></div>
+              <div><span style={{ color: "#a78bfa" }}>GET</span> <span className="text-gray-300">/api/memories</span> <span className="text-gray-600 text-xs">— list CIDs for an agent wallet</span></div>
             </div>
           </div>
         </section>
@@ -176,6 +178,12 @@ export default function Home() {
                 rune: "ᚱ",
                 title: "Scaffold complete",
                 desc: "Next.js 15 project scaffolded and deployed. 27 files. Asgard design system. Three API routes. Four-step demo panel. Three build failures fixed in sequence — wrong lighthouse package, v7 Lit SDK, missing chain field. Now live.",
+              },
+              {
+                time: "Day 1 — 13 Mar 2026, 20:33 UTC",
+                rune: "ᛖ",
+                title: "Core loop proven",
+                desc: "Agent-key architecture locked. Lit v8 authNeededCallback resolved — memories encrypted to the agent's own wallet, decrypted server-side via agent private key. Full remember → recall → revoke loop tested on live Filecoin + Lit infrastructure. CID registry and Filecoin manifest auto-uploaded. External agent SIWE challenge flow wired.",
               },
             ].map((entry, i) => (
               <div key={i} className="flex gap-4">

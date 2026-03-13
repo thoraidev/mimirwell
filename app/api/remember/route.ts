@@ -16,7 +16,11 @@ import { registerCID, uploadManifest } from "@/lib/cid-registry";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { content, wallet } = body as { content: string; wallet: string };
+    const { content, wallet, agentWallet: customAgentWallet } = body as {
+      content: string;
+      wallet: string;
+      agentWallet?: string; // optional — external agents pass their own wallet here
+    };
 
     if (!content || typeof content !== "string") {
       return NextResponse.json({ error: "content is required" }, { status: 400 });
@@ -25,7 +29,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "wallet address is required" }, { status: 400 });
     }
 
-    const agentAddress = getAgentAddress();
+    // If agentWallet is provided, encrypt to that wallet (external agent use case).
+    // Otherwise, default to ThorAI's own agent wallet (self-hosted use case).
+    const agentAddress = customAgentWallet ?? getAgentAddress();
 
     // 1. Encrypt with Lit Protocol — access controlled to the agent's wallet
     const encrypted = await encryptMemory(content, agentAddress);
