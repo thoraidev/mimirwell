@@ -1,9 +1,9 @@
 /**
- * lib/lighthouse.ts — Filecoin/IPFS storage via Lighthouse SDK
- * Stores encrypted blobs from Lit Protocol
+ * lib/lighthouse.ts — Filecoin storage via Lighthouse Web3 SDK
+ * https://www.lighthouse.storage/
  */
 
-import lighthouse from "lighthouse";
+import lighthouse from "@lighthouse-web3/sdk";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,17 +28,16 @@ export async function uploadToFilecoin(data: StoredBlob): Promise<UploadResult> 
   if (!apiKey) throw new Error("LIGHTHOUSE_API_KEY not configured");
 
   const json = JSON.stringify(data);
-  const buffer = Buffer.from(json, "utf-8");
 
-  // Upload buffer as a file
-  const { data: result } = await lighthouse.uploadBuffer(buffer, apiKey);
+  // Upload text/JSON buffer
+  const result = await lighthouse.uploadText(json, apiKey);
 
-  const cid = result?.Hash;
+  const cid = result?.data?.Hash;
   if (!cid) throw new Error("Lighthouse upload failed — no CID returned");
 
   return {
     cid,
-    size: result?.Size ?? buffer.length,
+    size: result?.data?.Size ?? json.length,
     url: `https://gateway.lighthouse.storage/ipfs/${cid}`,
   };
 }
@@ -46,7 +45,6 @@ export async function uploadToFilecoin(data: StoredBlob): Promise<UploadResult> 
 // ─── Fetch encrypted blob from Filecoin ───────────────────────────────────────
 
 export async function fetchFromFilecoin(cid: string): Promise<StoredBlob> {
-  // Try multiple gateways for reliability
   const gateways = [
     `https://gateway.lighthouse.storage/ipfs/${cid}`,
     `https://ipfs.io/ipfs/${cid}`,
@@ -69,15 +67,21 @@ export async function fetchFromFilecoin(cid: string): Promise<StoredBlob> {
   throw lastError ?? new Error(`Failed to fetch CID ${cid} from all gateways`);
 }
 
-// ─── List uploads for a wallet (via Lighthouse API) ───────────────────────────
+// ─── List uploads for a wallet ────────────────────────────────────────────────
 
 export async function listUploads(walletAddress: string): Promise<string[]> {
   const apiKey = process.env.LIGHTHOUSE_API_KEY;
   if (!apiKey) throw new Error("LIGHTHOUSE_API_KEY not configured");
 
   try {
-    const { data } = await lighthouse.getUploads(apiKey, walletAddress, 1);
-    return (data?.fileList ?? []).map((f: { cid: string }) => f.cid);
+    const result = await lighthouse.getUploads(apiKey);
+    const files = result?.data?.fileList ?? [];
+    // Filter by wallet if metadata available
+    return files
+      .filter((f: { publicKey?: string; cid: string }) =>
+        !walletAddress || f.publicKey?.toLowerCase() === walletAddress.toLowerCase()
+      )
+      .map((f: { cid: string }) => f.cid);
   } catch {
     return [];
   }
