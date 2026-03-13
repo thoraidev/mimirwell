@@ -66,6 +66,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ownerWallet is required" }, { status: 400 });
     }
 
+    // Guard: require server API secret to prevent unauthorized revokes
+    const apiSecret = process.env.MIMIRWELL_API_SECRET;
+    const callerSecret = req.headers.get("x-mimirwell-secret");
+    if (apiSecret && callerSecret !== apiSecret) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     // Resolve ENS names
     const agentAddress = await resolveAddress(rawAgent);
     const ownerAddress = await resolveAddress(rawOwner);
