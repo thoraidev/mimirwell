@@ -85,46 +85,21 @@ const REVOCATION_ABI = {
 };
 
 // ─── Build access control conditions ─────────────────────────────────────────
-// Compound: agent must own the wallet AND not be revoked on-chain.
+// Agent must prove ownership of their wallet to decrypt.
+// Revocation is enforced server-side (in-memory cache mirrors on-chain state).
+// On-chain contract (0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258) is the source
+// of truth — server checks it and caches; Lit enforces wallet identity.
 
 export function buildAccessConditions(
   agentWallet: string,
-  ownerWallet?: string
+  ownerWallet?: string  // kept for API compatibility
 ) {
+  void ownerWallet; // revocation enforced server-side, not in Lit ACC for now
   const builder = createAccBuilder();
-
-  // Condition 1: agent must prove wallet ownership
-  const walletCondition = builder
+  return builder
     .requireWalletOwnership(agentWallet.toLowerCase())
     .on("ethereum")
     .build();
-
-  // If no owner wallet provided, use wallet-ownership only (backward compat)
-  if (!ownerWallet) return walletCondition;
-
-  // Condition 2: isRevoked(ownerWallet, agentWallet) must return false
-  const revocationCondition = [
-    {
-      conditionType: "evmContract",
-      contractAddress: REVOCATION_CONTRACT,
-      functionName: "isRevoked",
-      functionParams: [ownerWallet.toLowerCase(), agentWallet.toLowerCase()],
-      functionAbi: REVOCATION_ABI,
-      chain: "ethereum",
-      returnValueTest: {
-        key: "",
-        comparator: "=",
-        value: "false",
-      },
-    },
-  ];
-
-  // AND the two conditions together
-  return [
-    ...walletCondition,
-    { operator: "and" },
-    ...revocationCondition,
-  ];
 }
 
 // ─── Encrypt ─────────────────────────────────────────────────────────────────
