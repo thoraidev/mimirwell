@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import MemoryCard, { type MemoryState } from "./MemoryCard";
 
@@ -16,12 +16,23 @@ export default function DemoPanel() {
   const { address, isConnected } = useAccount();
 
   const [agentWallet, setAgentWallet] = useState<string>("");
+  const [agentEns, setAgentEns] = useState<string | null>(null);
+  const [ownerEns, setOwnerEns] = useState<string | null>(null);
   const [memoryText, setMemoryText] = useState("");
   const [recallCid, setRecallCid] = useState("");
   const [revokeAgent, setRevokeAgent] = useState("");
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState<"remember" | "recall" | "revoke" | null>(null);
+
+  const resolveEns = useCallback(async (addr: string, setter: (n: string | null) => void) => {
+    if (!addr) return;
+    try {
+      const res = await fetch(`/api/ens-lookup?address=${encodeURIComponent(addr)}`);
+      const d = await res.json();
+      setter(d.name ?? null);
+    } catch { setter(null); }
+  }, []);
 
   // Fetch the agent's wallet address from the API on mount
   useEffect(() => {
@@ -31,10 +42,16 @@ export default function DemoPanel() {
         if (d.agentWallet) {
           setAgentWallet(d.agentWallet);
           setRevokeAgent(d.agentWallet); // pre-fill revoke for demo clarity
+          resolveEns(d.agentWallet, setAgentEns);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [resolveEns]);
+
+  // Resolve connected wallet ENS name
+  useEffect(() => {
+    if (address) resolveEns(address, setOwnerEns);
+  }, [address, resolveEns]);
 
   const handleRemember = async () => {
     if (!address || !memoryText.trim()) return;
@@ -114,16 +131,21 @@ export default function DemoPanel() {
   const handleRevoke = async () => {
     if (!address || !revokeAgent.trim()) return;
     setLoading("revoke");
-    setStatus("Revoking agent access…");
+    setStatus("Sending revocation to Ethereum mainnet…");
     try {
-      const res = await fetch("/api/revoke", {
+      const res = await fetch("/api/revoke-owner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agentWallet: revokeAgent.trim(), ownerWallet: address }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setStatus(`✓ Access revoked — ${revokeAgent.slice(0, 10)}… is sealed out`);
+      const txShort = data.txHash ? `${data.txHash.slice(0, 12)}…` : "";
+      setStatus(
+        data.txHash
+          ? `✓ Access revoked on-chain — tx: ${txShort} · ${data.etherscan}`
+          : `✓ Access revoked — ${revokeAgent.slice(0, 10)}… is sealed out`
+      );
     } catch (e) {
       setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -157,14 +179,41 @@ export default function DemoPanel() {
 
   return (
     <div className="space-y-8">
-      {/* Agent identity banner */}
+      {/* Agent + Owner identity banner */}
       {agentWallet && (
-        <div className="px-4 py-2.5 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 flex items-center gap-2">
-          <span className="text-lg">ᛏ</span>
-          <span>
-            Agent: <span className="text-[#00a8ff]">{agentWallet.slice(0, 10)}…{agentWallet.slice(-6)}</span>
-            &nbsp;·&nbsp;Memories encrypted to this wallet
-          </span>
+        <div className="px-4 py-3 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-base">ᛏ</span>
+            <span>
+              Agent:&nbsp;
+              <span className="text-[#00a8ff]">
+                {agentEns ?? `${agentWallet.slice(0, 10)}…${agentWallet.slice(-6)}`}
+              </span>
+              {agentEns && (
+                <span className="text-[#00a8ff]/40 ml-1">
+                  ({agentWallet.slice(0, 8)}…)
+                </span>
+              )}
+              &nbsp;·&nbsp;decryption identity
+            </span>
+          </div>
+          {address && (
+            <div className="flex items-center gap-2">
+              <span className="text-base">ᚨ</span>
+              <span>
+                Owner:&nbsp;
+                <span className="text-[#14b8a6]">
+                  {ownerEns ?? `${address.slice(0, 10)}…${address.slice(-6)}`}
+                </span>
+                {ownerEns && (
+                  <span className="text-[#14b8a6]/40 ml-1">
+                    ({address.slice(0, 8)}…)
+                  </span>
+                )}
+                &nbsp;·&nbsp;revocation authority
+              </span>
+            </div>
+          )}
         </div>
       )}
 

@@ -8,6 +8,8 @@ interface ActivityEvent {
   type: "REMEMBER" | "RECALL" | "RECALL_DENIED" | "REVOKE" | "REINSTATED";
   agentWallet: string;
   ownerWallet?: string;
+  agentWalletName?: string | null;
+  ownerWalletName?: string | null;
   cid?: string;
   cipher?: string;
   txHash?: string;
@@ -30,39 +32,51 @@ const COLOR: Record<string, string> = {
   REINSTATED: "#a78bfa",
 };
 
+// Display as ENS name if available, otherwise shorten hex
+function displayWallet(address: string, ensName?: string | null): string {
+  if (ensName) return ensName;
+  if (address.length >= 10) return `${address.slice(0, 6)}…${address.slice(-4)}`;
+  return address;
+}
+
 function renderLines(event: ActivityEvent): { text: string; color?: string }[] {
   const rune = RUNE[event.type] ?? "ᛟ";
   const color = COLOR[event.type] ?? "#9ca3af";
   const lines: { text: string; color?: string }[] = [];
 
+  const agent = displayWallet(event.agentWallet, event.agentWalletName);
+  const owner = event.ownerWallet
+    ? displayWallet(event.ownerWallet, event.ownerWalletName)
+    : "owner";
+
   switch (event.type) {
     case "REMEMBER":
-      lines.push({ text: `[${event.ts}] ${rune} REMEMBER  ${event.agentWallet} → Filecoin ✓`, color });
+      lines.push({ text: `[${event.ts}] ${rune} REMEMBER  ${agent} → Filecoin ✓`, color });
       if (event.cipher) lines.push({ text: `           ENCRYPT  ${event.cipher}…`, color: "#4b5563" });
       if (event.cid)    lines.push({ text: `           CID      ${event.cid}`, color: "#374151" });
       break;
 
     case "RECALL":
-      lines.push({ text: `[${event.ts}] ${rune} RECALL    ${event.agentWallet}`, color });
+      lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}`, color });
       if (event.cid)    lines.push({ text: `           CID      ${event.cid}`, color: "#374151" });
       lines.push({ text: `           DECRYPT  ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
       break;
 
     case "RECALL_DENIED":
-      lines.push({ text: `[${event.ts}] ${rune} RECALL    ${event.agentWallet}  ← DENIED`, color });
+      lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}  ← DENIED`, color });
       lines.push({ text: `           LIT      isRevoked() = true  [access sealed]`, color: "#ef4444" });
       break;
 
     case "REVOKE":
       lines.push({
-        text: `[${event.ts}] ${rune} REVOKE    ${event.ownerWallet ?? "owner"} → sealed ${event.agentWallet}`,
+        text: `[${event.ts}] ${rune} REVOKE    ${owner} → sealed ${agent}`,
         color,
       });
-      if (event.txHash) lines.push({ text: `           CHAIN    tx ${event.txHash} confirmed`, color: "#6b7280" });
+      if (event.txHash) lines.push({ text: `           CHAIN    tx ${event.txHash.slice(0, 14)}… confirmed`, color: "#6b7280" });
       break;
 
     case "REINSTATED":
-      lines.push({ text: `[${event.ts}] ${rune} REINSTATE ${event.ownerWallet ?? "owner"} → unlocked ${event.agentWallet}`, color });
+      lines.push({ text: `[${event.ts}] ${rune} REINSTATE ${owner} → unlocked ${agent}`, color });
       break;
   }
 

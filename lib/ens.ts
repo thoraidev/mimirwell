@@ -59,3 +59,40 @@ export async function tryResolveAddress(input: string | undefined): Promise<`0x$
     return null;
   }
 }
+
+// In-memory cache: address → primary ENS name (null = no primary name)
+const _reverseCache = new Map<string, string | null>();
+
+/**
+ * Reverse-resolves an Ethereum address to its primary ENS name.
+ * Returns null if no primary name is set.
+ * Results are cached in-memory for the process lifetime.
+ *
+ * @example
+ * await lookupAddress("0x8884AE2D5A381833565A8AAe6BD38bc3E4520412") // → "thorai.eth"
+ * await lookupAddress("0x1234...no-ens")                            // → null
+ */
+export async function lookupAddress(address: string): Promise<string | null> {
+  if (!address || !isAddress(address)) return null;
+  const key = address.toLowerCase();
+  if (_reverseCache.has(key)) return _reverseCache.get(key)!;
+  try {
+    const name = await ensClient.getEnsName({ address: address as `0x${string}` });
+    _reverseCache.set(key, name ?? null);
+    return name ?? null;
+  } catch {
+    _reverseCache.set(key, null);
+    return null;
+  }
+}
+
+/**
+ * Returns a display label for a wallet address:
+ * ENS primary name if set, otherwise shortened hex (0x1234…abcd).
+ */
+export async function displayAddress(address: string): Promise<string> {
+  const name = await lookupAddress(address);
+  if (name) return name;
+  if (address.length >= 10) return `${address.slice(0, 6)}…${address.slice(-4)}`;
+  return address;
+}
