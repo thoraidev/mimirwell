@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       ciphertext: blob.ciphertext,
       dataToEncryptHash: blob.dataToEncryptHash,
       accessControlConditions: blob.accessControlConditions as EncryptedMemory["accessControlConditions"],
+      chain: "ethereum",
     };
 
     // 3. Decrypt via Lit Protocol
