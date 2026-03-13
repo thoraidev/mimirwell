@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@buildersgarden/siwa": "^0.0.24",
     "@lighthouse-web3/sdk": "^0.4.4",
     "@lit-protocol/access-control-conditions": "^8.0.2",
     "@lit-protocol/auth": "^8.2.3",

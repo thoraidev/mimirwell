@@ -12,8 +12,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, encodeFunctionData } from "viem";
 import { mainnet } from "viem/chains";
+import { createKeyringProxySigner } from "@buildersgarden/siwa/signer";
 import { resolveAddress } from "@/lib/ens";
 import { logRevoke } from "@/lib/activity-log";
 
@@ -69,11 +70,15 @@ export async function POST(req: NextRequest) {
     const agentAddress = await resolveAddress(rawAgent);
     const ownerAddress = await resolveAddress(rawOwner);
 
-    // Import SIWA at runtime (ESM module)
-    const { signTransaction, getAddress } = await import("@buildersgarden/siwa/keystore");
-    const { encodeFunctionData } = await import("viem");
+    // Build signer from keyring proxy env vars
+    const proxyUrl = process.env.KEYRING_PROXY_URL;
+    const proxySecret = process.env.KEYRING_PROXY_SECRET;
+    if (!proxyUrl || !proxySecret) {
+      return NextResponse.json({ error: "Keyring proxy not configured" }, { status: 500 });
+    }
 
-    const signerAddressRaw = await getAddress();
+    const signer = createKeyringProxySigner({ proxyUrl, proxySecret });
+    const signerAddressRaw = await signer.getAddress();
     if (!signerAddressRaw) {
       return NextResponse.json({ error: "Keyring proxy returned no address" }, { status: 500 });
     }
@@ -118,7 +123,7 @@ export async function POST(req: NextRequest) {
       gas: (gas * 130n) / 100n,
     };
 
-    const { signedTx } = await signTransaction(tx);
+    const signedTx = await signer.signTransaction(tx);
     const txHash = await client.sendRawTransaction({ serializedTransaction: signedTx as `0x${string}` });
 
     // Wait for confirmation
