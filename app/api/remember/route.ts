@@ -1,13 +1,15 @@
 /**
  * POST /api/remember
- * Encrypts content with Lit Protocol and stores on Filecoin via Lighthouse.
+ * Encrypts content with Lit Protocol (to the agent's wallet) and stores on Filecoin.
  *
  * Body: { content: string, wallet: string }
- * Returns: { cid: string, encryptedData: object, status: "stored" }
+ *   wallet = the human owner's address (stored for provenance / revoke checks)
+ *
+ * Returns: { cid: string, agentWallet: string, status: "stored" }
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { encryptMemory } from "@/lib/lit";
+import { encryptMemory, getAgentAddress } from "@/lib/lit";
 import { uploadToFilecoin } from "@/lib/lighthouse";
 
 export async function POST(req: NextRequest) {
@@ -22,15 +24,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "wallet address is required" }, { status: 400 });
     }
 
-    // 1. Encrypt with Lit Protocol (nagaDev)
-    const encrypted = await encryptMemory(content, wallet.toLowerCase());
+    // The agent's wallet is the decryption key holder —
+    // memories are encrypted TO the agent so it can recall them autonomously.
+    const agentAddress = getAgentAddress();
 
-    // 2. Build storage blob
+    // 1. Encrypt with Lit Protocol — access controlled to the agent's wallet
+    const encrypted = await encryptMemory(content, agentAddress);
+
+    // 2. Build storage blob (also stores owner wallet for revoke checks)
     const blob = {
       ciphertext: encrypted.ciphertext,
       dataToEncryptHash: encrypted.dataToEncryptHash,
       accessControlConditions: encrypted.accessControlConditions,
-      wallet: wallet.toLowerCase(),
+      agentWallet: agentAddress.toLowerCase(),
+      ownerWallet: wallet.toLowerCase(),
       timestamp: Date.now(),
     };
 
@@ -40,6 +47,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       cid,
       url,
+      agentWallet: agentAddress,
       encryptedData: {
         ciphertext: encrypted.ciphertext,
         dataToEncryptHash: encrypted.dataToEncryptHash,

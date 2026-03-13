@@ -1,71 +1,67 @@
 /**
  * POST /api/recall
- * Fetches encrypted blob from Filecoin and decrypts via Lit Protocol.
+ * Fetches encrypted blob from Filecoin and decrypts via Lit Protocol using the agent's key.
+ * No browser wallet or authSig needed — the agent decrypts its own memories.
  *
- * Body: { cid: string, wallet: string, authSig?: object }
+ * Body: { cid: string, ownerWallet?: string }
  * Returns: { content: string, status: "decrypted" }
  *       OR { status: "denied", reason: "Access revoked" }
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { decryptMemory, type EncryptedMemory } from "@/lib/lit";
+import { decryptWithAgentKey, getAgentAddress, type EncryptedMemory } from "@/lib/lit";
 import { fetchFromFilecoin } from "@/lib/lighthouse";
+import { isRevoked } from "@/app/api/revoke/route";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { cid, wallet, authSig } = body as {
+    const { cid, ownerWallet } = body as {
       cid: string;
-      wallet: string;
-      authSig?: Record<string, unknown>;
+      ownerWallet?: string;
     };
 
     if (!cid || typeof cid !== "string") {
       return NextResponse.json({ error: "cid is required" }, { status: 400 });
     }
-    if (!wallet || typeof wallet !== "string") {
-      return NextResponse.json({ error: "wallet address is required" }, { status: 400 });
-    }
-    if (!authSig || typeof authSig !== "object") {
-      return NextResponse.json(
-        { error: "authSig is required for decryption (EIP-4361 signature from wallet)" },
-        { status: 400 }
-      );
-    }
 
     // 1. Fetch encrypted blob from Filecoin
     const blob = await fetchFromFilecoin(cid);
 
-    // Verify the blob belongs to the requesting wallet
-    if (blob.wallet && blob.wallet.toLowerCase() !== wallet.toLowerCase()) {
+    // 2. Check revocation — owner can revoke the agent's access
+    const agentAddress = getAgentAddress();
+    const resolvedOwner = ownerWallet ?? blob.ownerWallet ?? blob.wallet;
+
+    if (resolvedOwner && isRevoked(resolvedOwner.toLowerCase(), agentAddress.toLowerCase())) {
       return NextResponse.json(
-        { status: "denied", reason: "Access revoked" },
+        { status: "denied", reason: "Access revoked by owner" },
         { status: 403 }
       );
     }
 
-    // 2. Build EncryptedMemory object
+    // 3. Build EncryptedMemory object
     const encrypted: EncryptedMemory = {
       ciphertext: blob.ciphertext,
       dataToEncryptHash: blob.dataToEncryptHash,
-      accessControlConditions: blob.accessControlConditions as EncryptedMemory["accessControlConditions"],
+      accessControlConditions: blob.accessControlConditions,
       chain: "ethereum",
     };
 
-    // 3. Decrypt via Lit Protocol
+    // 4. Decrypt server-side using the agent's private key
     try {
-      const content = await decryptMemory(encrypted, authSig);
-      return NextResponse.json({ content, status: "decrypted" });
+      const content = await decryptWithAgentKey(encrypted);
+      return NextResponse.json({ content, agentWallet: agentAddress, status: "decrypted" });
     } catch (litErr) {
       const msg = litErr instanceof Error ? litErr.message : String(litErr);
       const isAccessDenied =
         msg.toLowerCase().includes("not authorized") ||
         msg.toLowerCase().includes("access denied") ||
-        msg.toLowerCase().includes("revoked");
+        msg.toLowerCase().includes("revoked") ||
+        msg.toLowerCase().includes("unauthorized");
 
       if (isAccessDenied) {
         return NextResponse.json(
-          { status: "denied", reason: "Access revoked" },
+          { status: "denied", reason: "Access revoked or unauthorized" },
           { status: 403 }
         );
       }

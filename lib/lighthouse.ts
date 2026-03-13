@@ -16,14 +16,21 @@ export interface UploadResult {
 export interface StoredBlob {
   ciphertext: string;
   dataToEncryptHash: string;
-  accessControlConditions: unknown[];
-  wallet: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  accessControlConditions: any;
+  /** Legacy: owner wallet (pre-agent-key model) */
+  wallet?: string;
+  /** Human principal who stored this memory */
+  ownerWallet?: string;
+  /** Agent wallet the memory is encrypted to */
+  agentWallet?: string;
   timestamp: number;
 }
 
 // ─── Upload encrypted blob ────────────────────────────────────────────────────
 
-export async function uploadToFilecoin(data: StoredBlob): Promise<UploadResult> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function uploadToFilecoin(data: StoredBlob | Record<string, any>): Promise<UploadResult> {
   const apiKey = process.env.LIGHTHOUSE_API_KEY;
   if (!apiKey) throw new Error("LIGHTHOUSE_API_KEY not configured");
 

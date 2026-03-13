@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount, useSignMessage } from "wagmi";
-import { createSiweMessage } from "viem/siwe";
+import { useState, useEffect } from "react";
+import { useAccount } from "wagmi";
 import MemoryCard, { type MemoryState } from "./MemoryCard";
 
 interface MemoryEntry {
@@ -15,8 +14,8 @@ interface MemoryEntry {
 
 export default function DemoPanel() {
   const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
 
+  const [agentWallet, setAgentWallet] = useState<string>("");
   const [memoryText, setMemoryText] = useState("");
   const [recallCid, setRecallCid] = useState("");
   const [revokeAgent, setRevokeAgent] = useState("");
@@ -24,25 +23,23 @@ export default function DemoPanel() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState<"remember" | "recall" | "revoke" | null>(null);
 
-  const getAuthSig = async () => {
-    if (!address) throw new Error("Wallet not connected");
-    const message = createSiweMessage({
-      domain: window.location.host,
-      address,
-      statement: "Sign to authenticate with MimirWell",
-      uri: window.location.origin,
-      version: "1",
-      chainId: 1,
-      nonce: Math.random().toString(36).slice(2),
-    });
-    const sig = await signMessageAsync({ message });
-    return { sig, derivedVia: "web3.eth.personal.sign", signedMessage: message, address };
-  };
+  // Fetch the agent's wallet address from the API on mount
+  useEffect(() => {
+    fetch("/api/agent-info")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.agentWallet) {
+          setAgentWallet(d.agentWallet);
+          setRevokeAgent(d.agentWallet); // pre-fill revoke for demo clarity
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleRemember = async () => {
     if (!address || !memoryText.trim()) return;
     setLoading("remember");
-    setStatus("Encrypting with Lit Protocol…");
+    setStatus("Encrypting with Lit Protocol → agent wallet…");
     try {
       const res = await fetch("/api/remember", {
         method: "POST",
@@ -52,11 +49,18 @@ export default function DemoPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMemories((prev) => [
-        { cid: data.cid, content: memoryText.trim(), wallet: address, state: "stored", timestamp: Date.now() },
+        {
+          cid: data.cid,
+          content: memoryText.trim(),
+          wallet: data.agentWallet ?? address,
+          state: "stored",
+          timestamp: Date.now(),
+        },
         ...prev,
       ]);
       setMemoryText("");
-      setStatus(`✓ Memory stored on Filecoin — CID: ${data.cid.slice(0, 12)}…`);
+      setRecallCid(data.cid); // auto-fill recall for easy demo flow
+      setStatus(`✓ Memory sealed on Filecoin — CID: ${data.cid.slice(0, 14)}…`);
     } catch (e) {
       setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -65,30 +69,38 @@ export default function DemoPanel() {
   };
 
   const handleRecall = async () => {
-    if (!address || !recallCid.trim()) return;
+    if (!recallCid.trim()) return;
     setLoading("recall");
-    setStatus("Requesting decryption from Lit Protocol…");
+    setStatus("Agent requesting decryption from Lit Protocol…");
     try {
-      const authSig = await getAuthSig();
       const res = await fetch("/api/recall", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cid: recallCid.trim(), wallet: address, authSig }),
+        body: JSON.stringify({
+          cid: recallCid.trim(),
+          ownerWallet: address,
+        }),
       });
       const data = await res.json();
       if (data.status === "denied") {
         setMemories((prev) => [
-          { cid: recallCid.trim(), wallet: address, state: "sealed", timestamp: Date.now() },
+          { cid: recallCid.trim(), wallet: agentWallet || "agent", state: "sealed", timestamp: Date.now() },
           ...prev,
         ]);
         setStatus("✗ Access denied — memory is sealed");
       } else if (res.ok) {
         setMemories((prev) => [
-          { cid: recallCid.trim(), content: data.content, wallet: address, state: "recalled", timestamp: Date.now() },
+          {
+            cid: recallCid.trim(),
+            content: data.content,
+            wallet: data.agentWallet ?? agentWallet,
+            state: "recalled",
+            timestamp: Date.now(),
+          },
           ...prev,
         ]);
         setRecallCid("");
-        setStatus("✓ Memory recalled successfully");
+        setStatus("✓ Memory recalled by agent");
       } else {
         throw new Error(data.error);
       }
@@ -102,7 +114,7 @@ export default function DemoPanel() {
   const handleRevoke = async () => {
     if (!address || !revokeAgent.trim()) return;
     setLoading("revoke");
-    setStatus("Revoking access…");
+    setStatus("Revoking agent access…");
     try {
       const res = await fetch("/api/revoke", {
         method: "POST",
@@ -111,8 +123,7 @@ export default function DemoPanel() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setRevokeAgent("");
-      setStatus(`✓ Access revoked for ${revokeAgent.slice(0, 8)}…`);
+      setStatus(`✓ Access revoked — ${revokeAgent.slice(0, 10)}… is sealed out`);
     } catch (e) {
       setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -146,6 +157,17 @@ export default function DemoPanel() {
 
   return (
     <div className="space-y-8">
+      {/* Agent identity banner */}
+      {agentWallet && (
+        <div className="px-4 py-2.5 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 flex items-center gap-2">
+          <span className="text-lg">ᛏ</span>
+          <span>
+            Agent: <span className="text-[#00a8ff]">{agentWallet.slice(0, 10)}…{agentWallet.slice(-6)}</span>
+            &nbsp;·&nbsp;Memories encrypted to this wallet
+          </span>
+        </div>
+      )}
+
       {/* Status bar */}
       {status && (
         <div className={`
@@ -164,6 +186,9 @@ export default function DemoPanel() {
       {/* Remember */}
       <div className="rounded-xl border border-[#00a8ff]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-[#00a8ff] font-bold text-sm tracking-widest mb-4">ᚠ REMEMBER</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Content is encrypted to the agent&apos;s wallet via Lit Protocol, then stored on Filecoin.
+        </p>
         <textarea
           value={memoryText}
           onChange={(e) => setMemoryText(e.target.value)}
@@ -186,6 +211,9 @@ export default function DemoPanel() {
       {/* Recall */}
       <div className="rounded-xl border border-[#14b8a6]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-[#14b8a6] font-bold text-sm tracking-widest mb-4">ᛖ RECALL</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          The agent uses its key to request decryption from Lit — no wallet signature required.
+        </p>
         <input
           value={recallCid}
           onChange={(e) => setRecallCid(e.target.value)}
@@ -207,6 +235,9 @@ export default function DemoPanel() {
       {/* Revoke */}
       <div className="rounded-xl border border-red-500/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-red-400 font-bold text-sm tracking-widest mb-4">ᛉ REVOKE ACCESS</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          You hold the lock. Revoke the agent&apos;s decryption rights — permanently.
+        </p>
         <input
           value={revokeAgent}
           onChange={(e) => setRevokeAgent(e.target.value)}
