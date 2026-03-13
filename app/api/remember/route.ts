@@ -5,12 +5,13 @@
  * Body: { content: string, wallet: string }
  *   wallet = the human owner's address (stored for provenance / revoke checks)
  *
- * Returns: { cid: string, agentWallet: string, status: "stored" }
+ * Returns: { cid: string, agentWallet: string, manifestCid: string, status: "stored" }
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { encryptMemory, getAgentAddress } from "@/lib/lit";
 import { uploadToFilecoin } from "@/lib/lighthouse";
+import { registerCID, uploadManifest } from "@/lib/cid-registry";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,14 +25,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "wallet address is required" }, { status: 400 });
     }
 
-    // The agent's wallet is the decryption key holder —
-    // memories are encrypted TO the agent so it can recall them autonomously.
     const agentAddress = getAgentAddress();
 
     // 1. Encrypt with Lit Protocol — access controlled to the agent's wallet
     const encrypted = await encryptMemory(content, agentAddress);
 
-    // 2. Build storage blob (also stores owner wallet for revoke checks)
+    // 2. Build storage blob
     const blob = {
       ciphertext: encrypted.ciphertext,
       dataToEncryptHash: encrypted.dataToEncryptHash,
@@ -44,10 +43,28 @@ export async function POST(req: NextRequest) {
     // 3. Upload to Filecoin via Lighthouse
     const { cid, url } = await uploadToFilecoin(blob);
 
+    // 4. Register in local CID index
+    registerCID({
+      cid,
+      agentWallet: agentAddress,
+      ownerWallet: wallet,
+      timestamp: Date.now(),
+      preview: content.slice(0, 80),
+    });
+
+    // 5. Upload updated manifest to Filecoin (async, non-blocking)
+    let manifestCid: string | null = null;
+    try {
+      manifestCid = await uploadManifest();
+    } catch (manifestErr) {
+      console.warn("[/api/remember] Manifest upload failed (non-fatal):", manifestErr);
+    }
+
     return NextResponse.json({
       cid,
       url,
       agentWallet: agentAddress,
+      manifestCid,
       encryptedData: {
         ciphertext: encrypted.ciphertext,
         dataToEncryptHash: encrypted.dataToEncryptHash,
