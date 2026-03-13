@@ -14,7 +14,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, encodeFunctionData } from "viem";
 import { mainnet } from "viem/chains";
-import { createKeyringProxySigner } from "@buildersgarden/siwa/signer";
+// Use require to avoid importing the signer barrel (which pulls in optional
+// Circle/Openfort peer deps that aren't installed).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const siwaKeystore = require("@buildersgarden/siwa/keystore") as {
+  getAddress: (config: { proxyUrl: string; proxySecret: string }) => Promise<string | null>;
+  signTransaction: (
+    tx: Record<string, unknown>,
+    config: { proxyUrl: string; proxySecret: string }
+  ) => Promise<{ signedTx: string }>;
+};
 import { resolveAddress } from "@/lib/ens";
 import { logRevoke } from "@/lib/activity-log";
 
@@ -84,8 +93,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Keyring proxy not configured" }, { status: 500 });
     }
 
-    const signer = createKeyringProxySigner({ proxyUrl, proxySecret });
-    const signerAddressRaw = await signer.getAddress();
+    const keystoreConfig = { proxyUrl, proxySecret };
+    const signerAddressRaw = await siwaKeystore.getAddress(keystoreConfig);
     if (!signerAddressRaw) {
       return NextResponse.json({ error: "Keyring proxy returned no address" }, { status: 500 });
     }
@@ -130,7 +139,7 @@ export async function POST(req: NextRequest) {
       gas: (gas * 130n) / 100n,
     };
 
-    const signedTx = await signer.signTransaction(tx);
+    const { signedTx } = await siwaKeystore.signTransaction(tx as Record<string, unknown>, keystoreConfig);
     const txHash = await client.sendRawTransaction({ serializedTransaction: signedTx as `0x${string}` });
 
     // Wait for confirmation
