@@ -68,14 +68,63 @@ const _memoryStorage = {
   async readPKPTokens(_params: unknown) { return null; },
 };
 
-// ─── Build wallet-ownership access control conditions ─────────────────────────
+// ─── Revocation contract (deployed on Ethereum mainnet) ───────────────────────
+// Any decrypt attempt checks isRevoked(ownerWallet, agentWallet) — Lit enforces this.
 
-export function buildAccessConditions(walletAddress: string) {
+const REVOCATION_CONTRACT = "0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258";
+
+const REVOCATION_ABI = {
+  name: "isRevoked",
+  type: "function",
+  inputs: [
+    { name: "owner", type: "address" },
+    { name: "agent", type: "address" },
+  ],
+  outputs: [{ name: "", type: "bool" }],
+  stateMutability: "view",
+};
+
+// ─── Build access control conditions ─────────────────────────────────────────
+// Compound: agent must own the wallet AND not be revoked on-chain.
+
+export function buildAccessConditions(
+  agentWallet: string,
+  ownerWallet?: string
+) {
   const builder = createAccBuilder();
-  return builder
-    .requireWalletOwnership(walletAddress)
+
+  // Condition 1: agent must prove wallet ownership
+  const walletCondition = builder
+    .requireWalletOwnership(agentWallet.toLowerCase())
     .on("ethereum")
     .build();
+
+  // If no owner wallet provided, use wallet-ownership only (backward compat)
+  if (!ownerWallet) return walletCondition;
+
+  // Condition 2: isRevoked(ownerWallet, agentWallet) must return false
+  const revocationCondition = [
+    {
+      conditionType: "evmContract",
+      contractAddress: REVOCATION_CONTRACT,
+      functionName: "isRevoked",
+      functionParams: [ownerWallet.toLowerCase(), agentWallet.toLowerCase()],
+      functionAbi: REVOCATION_ABI,
+      chain: "ethereum",
+      returnValueTest: {
+        key: "",
+        comparator: "=",
+        value: "false",
+      },
+    },
+  ];
+
+  // AND the two conditions together
+  return [
+    ...walletCondition,
+    { operator: "and" },
+    ...revocationCondition,
+  ];
 }
 
 // ─── Encrypt ─────────────────────────────────────────────────────────────────
@@ -83,10 +132,11 @@ export function buildAccessConditions(walletAddress: string) {
 
 export async function encryptMemory(
   content: string,
-  walletAddress: string
+  agentWallet: string,
+  ownerWallet?: string
 ): Promise<EncryptedMemory> {
   const client = await getLitClient();
-  const accs = buildAccessConditions(walletAddress.toLowerCase());
+  const accs = buildAccessConditions(agentWallet.toLowerCase(), ownerWallet?.toLowerCase());
 
   const encrypted = await client.encrypt({
     dataToEncrypt: content,

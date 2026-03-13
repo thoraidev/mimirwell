@@ -1,6 +1,7 @@
 import AsgardBackground from "@/components/AsgardBackground";
 import ConnectWallet from "@/components/ConnectWallet";
 import DemoPanel from "@/components/DemoPanel";
+import LiveTerminal from "@/components/LiveTerminal";
 
 export default function Home() {
   return (
@@ -141,6 +142,24 @@ export default function Home() {
               <div><span style={{ color: "#a78bfa" }}>GET</span> <span className="text-gray-300">/api/memories</span> <span className="text-gray-600 text-xs">— list CIDs for an agent wallet</span></div>
             </div>
           </div>
+        </section>
+
+        {/* ── Live Terminal ── */}
+        <section className="px-6 pb-20 max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <div
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-4"
+              style={{ borderColor: "rgba(0,168,255,0.3)", color: "#00a8ff", background: "rgba(0,168,255,0.08)" }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00a8ff] animate-pulse" />
+              LIVE NETWORK ACTIVITY
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Memory Operations</h2>
+            <p className="text-gray-500 text-sm">
+              Real-time cryptographic operations — encrypt fragments visible, plaintext never exposed.
+            </p>
+          </div>
+          <LiveTerminal />
         </section>
 
         {/* ── Build Log ── */}

@@ -1,49 +1,145 @@
 /**
  * POST /api/revoke
- * Revokes an agent wallet's access to memories.
+ * Revokes an agent wallet's decrypt rights — on-chain via MimirWellRevocation contract.
  *
  * Body: { agentWallet: string, ownerWallet: string }
- * Returns: { status: "revoked" }
+ *   Both fields accept hex addresses or ENS names.
  *
- * Note: Lit Protocol enforces access at decrypt time — revoking means updating
- * the access control conditions. In production, this would re-encrypt with new
- * ACCs excluding the agent wallet. For the hackathon demo, this endpoint logs
- * the revocation and returns the status. The access conditions are wallet-bound
- * to ownerWallet, so any agentWallet other than the owner is already denied.
+ * Returns: { status: "revoked", txHash: string }
+ *
+ * On-chain: calls MimirWellRevocation.revoke(agentWallet) from ownerWallet.
+ * Lit Protocol checks isRevoked() at every decrypt — no server involvement at decrypt time.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createPublicClient, http } from "viem";
+import { mainnet } from "viem/chains";
+import { resolveAddress } from "@/lib/ens";
+import { logRevoke } from "@/lib/activity-log";
 
-// Simple in-memory revocation list (use Redis/DB in production)
-const revocationList = new Set<string>();
+// ─── Contract ─────────────────────────────────────────────────────────────────
+
+const REVOCATION_CONTRACT = "0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258" as const;
+
+const REVOCATION_ABI = [
+  {
+    name: "revoke",
+    type: "function",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "isRevoked",
+    type: "function",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "agent", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+] as const;
+
+// ─── In-memory cache (mirrors on-chain state, survives within process) ────────
+const _revokedCache = new Set<string>();
+
+export function isRevokedCached(ownerWallet: string, agentWallet: string): boolean {
+  return _revokedCache.has(`${ownerWallet.toLowerCase()}:${agentWallet.toLowerCase()}`);
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { agentWallet, ownerWallet } = body as {
+    const { agentWallet: rawAgent, ownerWallet: rawOwner } = body as {
       agentWallet: string;
       ownerWallet: string;
     };
 
-    if (!agentWallet || typeof agentWallet !== "string") {
+    if (!rawAgent || typeof rawAgent !== "string") {
       return NextResponse.json({ error: "agentWallet is required" }, { status: 400 });
     }
-    if (!ownerWallet || typeof ownerWallet !== "string") {
+    if (!rawOwner || typeof rawOwner !== "string") {
       return NextResponse.json({ error: "ownerWallet is required" }, { status: 400 });
     }
 
-    // Record revocation
-    const key = `${ownerWallet.toLowerCase()}:${agentWallet.toLowerCase()}`;
-    revocationList.add(key);
+    // Resolve ENS names
+    const agentAddress = await resolveAddress(rawAgent);
+    const ownerAddress = await resolveAddress(rawOwner);
 
-    console.log(`[/api/revoke] Agent ${agentWallet} revoked by owner ${ownerWallet}`);
+    // Import SIWA at runtime (ESM module)
+    const { signTransaction, getAddress } = await import("@buildersgarden/siwa/keystore");
+    const { encodeFunctionData } = await import("viem");
+
+    const signerAddressRaw = await getAddress();
+    if (!signerAddressRaw) {
+      return NextResponse.json({ error: "Keyring proxy returned no address" }, { status: 500 });
+    }
+    const signerAddress = signerAddressRaw as `0x${string}`;
+
+    // Verify the signer IS the owner (security check)
+    if (signerAddress.toLowerCase() !== ownerAddress.toLowerCase()) {
+      return NextResponse.json(
+        { error: `Signer (${signerAddress}) does not match ownerWallet (${ownerAddress})` },
+        { status: 403 }
+      );
+    }
+
+    const client = createPublicClient({
+      chain: mainnet,
+      transport: http("https://ethereum-rpc.publicnode.com"),
+    });
+
+    // Build the revoke() call
+    const data = encodeFunctionData({
+      abi: REVOCATION_ABI,
+      functionName: "revoke",
+      args: [agentAddress],
+    });
+
+    const nonce = await client.getTransactionCount({ address: signerAddress });
+    const { maxFeePerGas, maxPriorityFeePerGas } = await client.estimateFeesPerGas();
+    const gas = await client.estimateGas({
+      account: signerAddress,
+      to: REVOCATION_CONTRACT,
+      data,
+    });
+
+    const tx = {
+      to: REVOCATION_CONTRACT as `0x${string}`,
+      data: data as `0x${string}`,
+      nonce,
+      chainId: mainnet.id,
+      type: 2 as const,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      gas: (gas * 130n) / 100n,
+    };
+
+    const { signedTx } = await signTransaction(tx);
+    const txHash = await client.sendRawTransaction({ serializedTransaction: signedTx as `0x${string}` });
+
+    // Wait for confirmation
+    const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+
+    // Update in-memory cache
+    _revokedCache.add(`${ownerAddress.toLowerCase()}:${agentAddress.toLowerCase()}`);
+
+    // Log to activity feed
+    logRevoke({ ownerWallet: ownerAddress, agentWallet: agentAddress, txHash });
+
+    console.log(`[/api/revoke] Agent ${agentAddress} revoked by ${ownerAddress} | tx ${txHash}`);
 
     return NextResponse.json({
       status: "revoked",
-      agentWallet: agentWallet.toLowerCase(),
-      ownerWallet: ownerWallet.toLowerCase(),
+      agentWallet: agentAddress.toLowerCase(),
+      ownerWallet: ownerAddress.toLowerCase(),
+      txHash,
+      blockNumber: receipt.blockNumber.toString(),
+      etherscan: `https://etherscan.io/tx/${txHash}`,
       revokedAt: new Date().toISOString(),
-      note: "Access control is enforced by Lit Protocol at decrypt time. The agent wallet can no longer decrypt memories owned by this wallet.",
     });
   } catch (err) {
     console.error("[/api/revoke] Error:", err);
@@ -52,8 +148,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Helper: check if a wallet pair has been revoked (used by /api/recall)
+// Legacy export — kept for /api/recall compatibility during transition
 export function isRevoked(ownerWallet: string, agentWallet: string): boolean {
-  const key = `${ownerWallet.toLowerCase()}:${agentWallet.toLowerCase()}`;
-  return revocationList.has(key);
+  return isRevokedCached(ownerWallet, agentWallet);
 }

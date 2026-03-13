@@ -2,8 +2,9 @@
  * POST /api/remember
  * Encrypts content with Lit Protocol (to the agent's wallet) and stores on Filecoin.
  *
- * Body: { content: string, wallet: string }
- *   wallet = the human owner's address (stored for provenance / revoke checks)
+ * Body: { content: string, wallet: string, agentWallet?: string }
+ *   wallet      = human owner's address or ENS name (e.g. "thorai.eth")
+ *   agentWallet = optional; external agents pass their own wallet/ENS here
  *
  * Returns: { cid: string, agentWallet: string, manifestCid: string, status: "stored" }
  */
@@ -12,6 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { encryptMemory, getAgentAddress } from "@/lib/lit";
 import { uploadToFilecoin } from "@/lib/lighthouse";
 import { registerCID, uploadManifest } from "@/lib/cid-registry";
+import { resolveAddress } from "@/lib/ens";
+import { logRemember } from "@/lib/activity-log";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,22 +22,24 @@ export async function POST(req: NextRequest) {
     const { content, wallet, agentWallet: customAgentWallet } = body as {
       content: string;
       wallet: string;
-      agentWallet?: string; // optional — external agents pass their own wallet here
+      agentWallet?: string;
     };
 
     if (!content || typeof content !== "string") {
       return NextResponse.json({ error: "content is required" }, { status: 400 });
     }
     if (!wallet || typeof wallet !== "string") {
-      return NextResponse.json({ error: "wallet address is required" }, { status: 400 });
+      return NextResponse.json({ error: "wallet address or ENS name is required" }, { status: 400 });
     }
 
-    // If agentWallet is provided, encrypt to that wallet (external agent use case).
-    // Otherwise, default to ThorAI's own agent wallet (self-hosted use case).
-    const agentAddress = customAgentWallet ?? getAgentAddress();
+    // Resolve ENS names → hex addresses
+    const ownerAddress = await resolveAddress(wallet);
+    const agentAddress = customAgentWallet
+      ? await resolveAddress(customAgentWallet)
+      : getAgentAddress();
 
-    // 1. Encrypt with Lit Protocol — access controlled to the agent's wallet
-    const encrypted = await encryptMemory(content, agentAddress);
+    // 1. Encrypt with Lit Protocol — ACC: agent owns wallet AND not revoked on-chain
+    const encrypted = await encryptMemory(content, agentAddress, ownerAddress);
 
     // 2. Build storage blob
     const blob = {
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest) {
       dataToEncryptHash: encrypted.dataToEncryptHash,
       accessControlConditions: encrypted.accessControlConditions,
       agentWallet: agentAddress.toLowerCase(),
-      ownerWallet: wallet.toLowerCase(),
+      ownerWallet: ownerAddress.toLowerCase(),
       timestamp: Date.now(),
     };
 
@@ -53,12 +58,20 @@ export async function POST(req: NextRequest) {
     registerCID({
       cid,
       agentWallet: agentAddress,
-      ownerWallet: wallet,
+      ownerWallet: ownerAddress,
       timestamp: Date.now(),
       preview: content.slice(0, 80),
     });
 
-    // 5. Upload updated manifest to Filecoin (async, non-blocking)
+    // 5. Log to activity feed
+    logRemember({
+      agentWallet: agentAddress,
+      ownerWallet: ownerAddress,
+      cid,
+      ciphertext: encrypted.ciphertext,
+    });
+
+    // 6. Upload updated manifest to Filecoin (async, non-blocking)
     let manifestCid: string | null = null;
     try {
       manifestCid = await uploadManifest();
