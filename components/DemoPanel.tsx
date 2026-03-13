@@ -181,37 +181,43 @@ export default function DemoPanel() {
     <div className="space-y-8">
       {/* Agent + Owner identity banner */}
       {agentWallet && (
-        <div className="px-4 py-3 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-base">ᛏ</span>
-            <span>
-              Agent:&nbsp;
-              <span className="text-[#00a8ff]">
-                {agentEns ?? `${agentWallet.slice(0, 10)}…${agentWallet.slice(-6)}`}
-              </span>
-              {agentEns && (
-                <span className="text-[#00a8ff]/40 ml-1">
-                  ({agentWallet.slice(0, 8)}…)
-                </span>
-              )}
-              &nbsp;·&nbsp;decryption identity
-            </span>
+        <div className="px-4 py-3 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 space-y-2">
+          {/* Agent wallet row */}
+          <div className="flex items-start gap-2">
+            <span className="text-base mt-0.5 shrink-0">ᛏ</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-[#00a8ff]/60">Agent · decryption identity</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[#00a8ff] break-all">{agentEns ?? agentWallet}</span>
+                {agentEns && <span className="text-[#00a8ff]/40 shrink-0 break-all">{agentWallet}</span>}
+                <button
+                  onClick={() => navigator.clipboard.writeText(agentWallet)}
+                  title="Copy agent address"
+                  className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto"
+                >
+                  ⎘
+                </button>
+              </div>
+            </div>
           </div>
+          {/* Owner wallet row */}
           {address && (
-            <div className="flex items-center gap-2">
-              <span className="text-base">ᚨ</span>
-              <span>
-                Owner:&nbsp;
-                <span className="text-[#14b8a6]">
-                  {ownerEns ?? `${address.slice(0, 10)}…${address.slice(-6)}`}
-                </span>
-                {ownerEns && (
-                  <span className="text-[#14b8a6]/40 ml-1">
-                    ({address.slice(0, 8)}…)
-                  </span>
-                )}
-                &nbsp;·&nbsp;revocation authority
-              </span>
+            <div className="flex items-start gap-2">
+              <span className="text-base mt-0.5 shrink-0">ᚨ</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-[#14b8a6]/60">Owner · revocation authority</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[#14b8a6] break-all">{ownerEns ?? address}</span>
+                  {ownerEns && <span className="text-[#14b8a6]/40 shrink-0 break-all">{address}</span>}
+                  <button
+                    onClick={() => navigator.clipboard.writeText(address)}
+                    title="Copy owner address"
+                    className="shrink-0 text-[#14b8a6]/40 hover:text-[#14b8a6] transition-colors cursor-pointer ml-auto"
+                  >
+                    ⎘
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
