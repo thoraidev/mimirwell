@@ -20,13 +20,15 @@ export type ActivityEventType =
 
 export interface ActivityEvent {
   id: string;
-  ts: string;          // "HH:MM:SS" UTC
+  ts: string;             // "HH:MM:SS" UTC
   type: ActivityEventType;
-  agentWallet: string; // "0x60b3…5c2A"
-  ownerWallet?: string;
-  cid?: string;        // "bafkrei…pma"
-  cipher?: string;     // first 48 chars of ciphertext
-  txHash?: string;     // revoke/reinstate on-chain tx
+  agentWallet: string;    // truncated: "0x60b3…5c2A" (display fallback)
+  agentWalletFull?: string; // full hex address for ENS reverse lookup
+  ownerWallet?: string;   // truncated: "0x8884…0412"
+  ownerWalletFull?: string; // full hex address for ENS reverse lookup
+  cid?: string;           // "bafkrei…pma"
+  cipher?: string;        // first 48 chars of ciphertext
+  txHash?: string;        // revoke/reinstate on-chain tx
   success: boolean;
 }
 
@@ -88,7 +90,9 @@ export function logRemember(opts: {
     ts: nowUtc(),
     type: 'REMEMBER',
     agentWallet: truncateWallet(opts.agentWallet),
+    agentWalletFull: opts.agentWallet,
     ownerWallet: truncateWallet(opts.ownerWallet),
+    ownerWalletFull: opts.ownerWallet,
     cid: truncateCid(opts.cid),
     cipher: opts.ciphertext.slice(0, 48),
     success: true,
@@ -110,6 +114,7 @@ export function logRecall(opts: {
     ts: nowUtc(),
     type: opts.denied ? 'RECALL_DENIED' : 'RECALL',
     agentWallet: truncateWallet(opts.agentWallet),
+    agentWalletFull: opts.agentWallet,
     cid: truncateCid(opts.cid),
     success: opts.success,
   };
@@ -129,7 +134,9 @@ export function logRevoke(opts: {
     ts: nowUtc(),
     type: 'REVOKE',
     agentWallet: truncateWallet(opts.agentWallet),
+    agentWalletFull: opts.agentWallet,
     ownerWallet: truncateWallet(opts.ownerWallet),
+    ownerWalletFull: opts.ownerWallet,
     txHash: opts.txHash
       ? opts.txHash.slice(0, 10) + '…' + opts.txHash.slice(-6)
       : undefined,
@@ -151,7 +158,9 @@ export function logReinstate(opts: {
     ts: nowUtc(),
     type: 'REINSTATED',
     agentWallet: truncateWallet(opts.agentWallet),
+    agentWalletFull: opts.agentWallet,
     ownerWallet: truncateWallet(opts.ownerWallet),
+    ownerWalletFull: opts.ownerWallet,
     txHash: opts.txHash
       ? opts.txHash.slice(0, 10) + '…' + opts.txHash.slice(-6)
       : undefined,
