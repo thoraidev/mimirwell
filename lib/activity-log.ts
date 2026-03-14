@@ -140,6 +140,28 @@ export function logRevoke(opts: {
   save();
 }
 
+export function logReinstate(opts: {
+  ownerWallet: string;
+  agentWallet: string;
+  txHash?: string;
+}) {
+  load();
+  const event: ActivityEvent = {
+    id: shortId(),
+    ts: nowUtc(),
+    type: 'REINSTATED',
+    agentWallet: truncateWallet(opts.agentWallet),
+    ownerWallet: truncateWallet(opts.ownerWallet),
+    txHash: opts.txHash
+      ? opts.txHash.slice(0, 10) + '…' + opts.txHash.slice(-6)
+      : undefined,
+    success: true,
+  };
+  _events.push(event);
+  if (_events.length > MAX_EVENTS) _events = _events.slice(-MAX_EVENTS);
+  save();
+}
+
 export function getRecentActivity(limit = 20): ActivityEvent[] {
   load();
   return _events.slice(-limit);

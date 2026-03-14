@@ -24,16 +24,14 @@ const publicClient = createPublicClient({
   transport: http("https://ethereum-rpc.publicnode.com"),
 });
 
-// Check revocation: cache first, then on-chain fallback
+// Check revocation: on-chain is authoritative, cache is RPC fallback only.
+// Always querying the contract ensures reinstates (MetaMask or server) take effect immediately.
 async function checkRevoked(ownerWallet: string, agentWallet: string): Promise<boolean> {
   const owner = ownerWallet.toLowerCase();
   const agent = agentWallet.toLowerCase();
 
-  // Fast path: in-memory cache
-  if (isRevokedCached(owner, agent)) return true;
-
-  // Slow path: query the contract directly
-  // This honours revokes done via MetaMask, Etherscan, or any external wallet
+  // Always check on-chain — the contract is the source of truth.
+  // This honours both revokes AND reinstates done via any path (MetaMask, Etherscan, curl).
   try {
     const revoked = await publicClient.readContract({
       address: REVOCATION_CONTRACT,
@@ -43,8 +41,9 @@ async function checkRevoked(ownerWallet: string, agentWallet: string): Promise<b
     });
     return !!revoked;
   } catch (err) {
-    console.warn("[/api/recall] On-chain revocation check failed (non-fatal):", err);
-    return false; // fail open — better than blocking valid recalls
+    // RPC unreachable — fall back to in-memory cache (conservative: deny if cache says revoked)
+    console.warn("[/api/recall] On-chain revocation check failed, falling back to cache:", err);
+    return isRevokedCached(owner, agent);
   }
 }
 

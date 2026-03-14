@@ -17,6 +17,13 @@ const REVOCATION_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
+  {
+    name: "reinstate",
+    type: "function",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,10 +43,16 @@ export default function DemoPanel() {
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
 
-  // Contract write
-  const { writeContract, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
+  // Contract write — revoke
+  const { writeContract: writeRevoke, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
   const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({
     hash: revokeTxHash,
+  });
+
+  // Contract write — reinstate
+  const { writeContract: writeReinstate, data: reinstateTxHash, isPending: reinstateIsPending, error: reinstateError } = useWriteContract();
+  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({
+    hash: reinstateTxHash,
   });
 
   const [agentWallet, setAgentWallet] = useState<string>("");
@@ -105,6 +118,28 @@ export default function DemoPanel() {
       setStatus(`✗ ${msg}`);
     }
   }, [revokeError]);
+
+  // Reinstate tx lifecycle
+  useEffect(() => {
+    if (reinstateIsPending) setStatus("Confirm the reinstatement in MetaMask…");
+  }, [reinstateIsPending]);
+
+  useEffect(() => {
+    if (reinstateConfirming) setStatus("Transaction submitted — waiting for mainnet confirmation…");
+  }, [reinstateConfirming]);
+
+  useEffect(() => {
+    if (reinstateConfirmed && reinstateTxHash) {
+      setStatus(`✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`);
+    }
+  }, [reinstateConfirmed, reinstateTxHash]);
+
+  useEffect(() => {
+    if (reinstateError) {
+      const msg = reinstateError.message?.split("\n")[0] ?? "Transaction failed";
+      setStatus(`✗ ${msg}`);
+    }
+  }, [reinstateError]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -178,10 +213,27 @@ export default function DemoPanel() {
     }
 
     setStatus("Opening MetaMask — confirm the revocation transaction…");
-    writeContract({
+    writeRevoke({
       address: REVOCATION_CONTRACT,
       abi: REVOCATION_ABI,
       functionName: "revoke",
+      args: [revokeAgent.trim() as `0x${string}`],
+    });
+  };
+
+  const handleReinstate = () => {
+    if (!revokeAgent.trim() || !address) return;
+
+    if (chainId !== mainnet.id) {
+      switchChain({ chainId: mainnet.id });
+      return;
+    }
+
+    setStatus("Opening MetaMask — confirm the reinstatement transaction…");
+    writeReinstate({
+      address: REVOCATION_CONTRACT,
+      abi: REVOCATION_ABI,
+      functionName: "reinstate",
       args: [revokeAgent.trim() as `0x${string}`],
     });
   };
@@ -198,6 +250,7 @@ export default function DemoPanel() {
   }
 
   const isRevoking = revokeIsPending || revokeConfirming;
+  const isReinstating = reinstateIsPending || reinstateConfirming;
   const wrongNetwork = chainId !== mainnet.id;
 
   const inputClass = `
@@ -326,7 +379,7 @@ export default function DemoPanel() {
         <h3 className="text-red-400 font-bold text-sm tracking-widest mb-1">ᛉ REVOKE ACCESS</h3>
         <p className="text-xs text-gray-500 mb-4">
           Your wallet signs directly on-chain. MetaMask will open — you pay ~$0.05 gas.
-          No server involvement. <span className="text-red-400/60">Permanent.</span>
+          No server involvement. <span className="text-red-400/60">Revocable on-chain. Reversible via Reinstate.</span>
         </p>
         <input
           value={revokeAgent}
@@ -336,12 +389,12 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRevoke}
-          disabled={!revokeAgent.trim() || isRevoking || loading !== null}
+          disabled={!revokeAgent.trim() || isRevoking || isReinstating || loading !== null}
           className={btnClass(
             wrongNetwork
               ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
               : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
-            !revokeAgent.trim() || isRevoking || loading !== null
+            !revokeAgent.trim() || isRevoking || isReinstating || loading !== null
           )}
         >
           {wrongNetwork
@@ -358,6 +411,48 @@ export default function DemoPanel() {
             className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate"
           >
             ↗ etherscan.io/tx/{revokeTxHash.slice(0, 20)}…
+          </a>
+        )}
+      </div>
+
+      {/* Reinstate — browser wallet signing */}
+      <div className="rounded-xl border border-[#a78bfa]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
+        <h3 className="font-bold text-sm tracking-widest mb-1" style={{ color: "#a78bfa" }}>ᚱ REINSTATE ACCESS</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Undo a previous revocation. Your wallet signs on-chain — the pardon to the kill switch.
+          ~$0.05 gas. Agent can recall again immediately after confirmation.
+        </p>
+        <input
+          value={revokeAgent}
+          onChange={(e) => setRevokeAgent(e.target.value)}
+          placeholder="Agent wallet address to reinstate (0x…)"
+          className={`${inputClass} mb-3`}
+        />
+        <button
+          onClick={handleReinstate}
+          disabled={!revokeAgent.trim() || isRevoking || isReinstating || loading !== null}
+          className={btnClass(
+            wrongNetwork
+              ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+              : "border-[#a78bfa]/40 bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 hover:shadow-[0_0_20px_rgba(167,139,250,0.2)]",
+            !revokeAgent.trim() || isRevoking || isReinstating || loading !== null
+          )}
+          style={!wrongNetwork && !(!revokeAgent.trim() || isRevoking || isReinstating || loading !== null) ? { color: "#a78bfa" } : {}}
+        >
+          {wrongNetwork
+            ? "Switch to Mainnet →"
+            : isReinstating
+              ? reinstateIsPending ? "Waiting for MetaMask…" : "Confirming on-chain…"
+              : "Reinstate Access → MetaMask"}
+        </button>
+        {reinstateTxHash && (
+          <a
+            href={`https://etherscan.io/tx/${reinstateTxHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate"
+          >
+            ↗ etherscan.io/tx/{reinstateTxHash.slice(0, 20)}…
           </a>
         )}
       </div>
