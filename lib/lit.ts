@@ -1,11 +1,11 @@
 /**
  * lib/lit.ts — Lit Protocol v8 / Naga helpers for MimirWell
- * Network: nagaDev (free, no payment required, perfect for dev/demo)
+ * Network: nagaTest (free, more stable node distribution than nagaDev)
  * Docs: https://developer.litprotocol.com/sdk/introduction
  */
 
 import { createLitClient } from "@lit-protocol/lit-client";
-import { nagaDev } from "@lit-protocol/networks";
+import { nagaTest } from "@lit-protocol/networks";
 import { createAccBuilder } from "@lit-protocol/access-control-conditions";
 import { createAuthManager } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
@@ -39,7 +39,7 @@ let _client: any = null;
 
 export async function getLitClient() {
   if (_client) return _client;
-  _client = await createLitClient({ network: nagaDev });
+  _client = await createLitClient({ network: nagaTest });
   return _client;
 }
 
