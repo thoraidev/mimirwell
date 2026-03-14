@@ -1,14 +1,14 @@
 /**
  * lib/activity-log.ts — Activity event log for the live terminal
  *
- * Stores the last 100 events in memory + persists to /tmp/mimirwell-activity.json
+ * Stores the last 100 events in memory + persists to /data/mimirwell-activity.json
  * The /api/activity endpoint returns these for the frontend terminal.
  */
 
 import fs from 'fs';
 import { randomBytes } from 'crypto';
 
-const ACTIVITY_FILE = '/tmp/mimirwell-activity.json';
+const ACTIVITY_FILE = '/data/mimirwell-activity.json';
 const MAX_EVENTS = 100;
 
 export type ActivityEventType =

@@ -2,7 +2,7 @@
  * lib/cid-registry.ts — CID index for agent memories
  *
  * Two-layer persistence:
- * 1. Railway filesystem (/tmp/mimirwell-cids.json) — fast, survives restarts
+ * 1. Railway volume (/data/mimirwell-cids.json) — fast, survives restarts AND redeploys
  * 2. Filecoin manifest — uploaded periodically, rootManifestCid stored here
  *
  * Recovery path: if server is lost, boot a new server with the same private key
@@ -33,7 +33,7 @@ export interface CIDRegistry {
 
 // ─── Storage path ─────────────────────────────────────────────────────────────
 
-const REGISTRY_PATH = "/tmp/mimirwell-cids.json";
+const REGISTRY_PATH = "/data/mimirwell-cids.json";
 
 // ─── Read / write ─────────────────────────────────────────────────────────────
 
