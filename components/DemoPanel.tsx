@@ -1,8 +1,25 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId } from "wagmi";
+import { mainnet } from "wagmi/chains";
 import MemoryCard, { type MemoryState } from "./MemoryCard";
+
+// ─── Revocation contract ──────────────────────────────────────────────────────
+
+const REVOCATION_CONTRACT = "0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258" as const;
+
+const REVOCATION_ABI = [
+  {
+    name: "revoke",
+    type: "function",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MemoryEntry {
   cid: string;
@@ -12,8 +29,18 @@ interface MemoryEntry {
   timestamp: number;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function DemoPanel() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+
+  // Contract write
+  const { writeContract, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
+  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({
+    hash: revokeTxHash,
+  });
 
   const [agentWallet, setAgentWallet] = useState<string>("");
   const [agentEns, setAgentEns] = useState<string | null>(null);
@@ -23,7 +50,7 @@ export default function DemoPanel() {
   const [revokeAgent, setRevokeAgent] = useState("");
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [status, setStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"remember" | "recall" | "revoke" | null>(null);
+  const [loading, setLoading] = useState<"remember" | "recall" | null>(null);
 
   const resolveEns = useCallback(async (addr: string, setter: (n: string | null) => void) => {
     if (!addr) return;
@@ -34,24 +61,52 @@ export default function DemoPanel() {
     } catch { setter(null); }
   }, []);
 
-  // Fetch the agent's wallet address from the API on mount
+  // Fetch agent wallet on mount
   useEffect(() => {
     fetch("/api/agent-info")
       .then((r) => r.json())
       .then((d) => {
         if (d.agentWallet) {
           setAgentWallet(d.agentWallet);
-          setRevokeAgent(d.agentWallet); // pre-fill revoke for demo clarity
+          setRevokeAgent(d.agentWallet);
           resolveEns(d.agentWallet, setAgentEns);
         }
       })
       .catch(() => {});
   }, [resolveEns]);
 
-  // Resolve connected wallet ENS name
+  // Resolve connected wallet ENS
   useEffect(() => {
     if (address) resolveEns(address, setOwnerEns);
   }, [address, resolveEns]);
+
+  // Track revoke tx lifecycle
+  useEffect(() => {
+    if (revokeIsPending) {
+      setStatus("Confirm the transaction in MetaMask…");
+    }
+  }, [revokeIsPending]);
+
+  useEffect(() => {
+    if (revokeConfirming) {
+      setStatus("Transaction submitted — waiting for mainnet confirmation…");
+    }
+  }, [revokeConfirming]);
+
+  useEffect(() => {
+    if (revokeConfirmed && revokeTxHash) {
+      setStatus(`✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`);
+    }
+  }, [revokeConfirmed, revokeTxHash]);
+
+  useEffect(() => {
+    if (revokeError) {
+      const msg = revokeError.message?.split("\n")[0] ?? "Transaction failed";
+      setStatus(`✗ ${msg}`);
+    }
+  }, [revokeError]);
+
+  // ─── Handlers ────────────────────────────────────────────────────────────────
 
   const handleRemember = async () => {
     if (!address || !memoryText.trim()) return;
@@ -66,17 +121,11 @@ export default function DemoPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMemories((prev) => [
-        {
-          cid: data.cid,
-          content: memoryText.trim(),
-          wallet: data.agentWallet ?? address,
-          state: "stored",
-          timestamp: Date.now(),
-        },
+        { cid: data.cid, content: memoryText.trim(), wallet: data.agentWallet ?? address, state: "stored", timestamp: Date.now() },
         ...prev,
       ]);
       setMemoryText("");
-      setRecallCid(data.cid); // auto-fill recall for easy demo flow
+      setRecallCid(data.cid);
       setStatus(`✓ Memory sealed on Filecoin — CID: ${data.cid.slice(0, 14)}…`);
     } catch (e) {
       setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
@@ -93,10 +142,7 @@ export default function DemoPanel() {
       const res = await fetch("/api/recall", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cid: recallCid.trim(),
-          ownerWallet: address,
-        }),
+        body: JSON.stringify({ cid: recallCid.trim(), ownerWallet: address }),
       });
       const data = await res.json();
       if (data.status === "denied") {
@@ -104,16 +150,10 @@ export default function DemoPanel() {
           { cid: recallCid.trim(), wallet: agentWallet || "agent", state: "sealed", timestamp: Date.now() },
           ...prev,
         ]);
-        setStatus("✗ Access denied — memory is sealed");
+        setStatus("✗ Access denied — memory sealed by owner");
       } else if (res.ok) {
         setMemories((prev) => [
-          {
-            cid: recallCid.trim(),
-            content: data.content,
-            wallet: data.agentWallet ?? agentWallet,
-            state: "recalled",
-            timestamp: Date.now(),
-          },
+          { cid: recallCid.trim(), content: data.content, wallet: data.agentWallet ?? agentWallet, state: "recalled", timestamp: Date.now() },
           ...prev,
         ]);
         setRecallCid("");
@@ -128,30 +168,25 @@ export default function DemoPanel() {
     }
   };
 
-  const handleRevoke = async () => {
-    if (!address || !revokeAgent.trim()) return;
-    setLoading("revoke");
-    setStatus("Sending revocation to Ethereum mainnet…");
-    try {
-      const res = await fetch("/api/revoke-owner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentWallet: revokeAgent.trim(), ownerWallet: address }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      const txShort = data.txHash ? `${data.txHash.slice(0, 12)}…` : "";
-      setStatus(
-        data.txHash
-          ? `✓ Access revoked on-chain — tx: ${txShort} · ${data.etherscan}`
-          : `✓ Access revoked — ${revokeAgent.slice(0, 10)}… is sealed out`
-      );
-    } catch (e) {
-      setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setLoading(null);
+  const handleRevoke = () => {
+    if (!revokeAgent.trim() || !address) return;
+
+    // Must be on mainnet
+    if (chainId !== mainnet.id) {
+      switchChain({ chainId: mainnet.id });
+      return;
     }
+
+    setStatus("Opening MetaMask — confirm the revocation transaction…");
+    writeContract({
+      address: REVOCATION_CONTRACT,
+      abi: REVOCATION_ABI,
+      functionName: "revoke",
+      args: [revokeAgent.trim() as `0x${string}`],
+    });
   };
+
+  // ─── UI helpers ───────────────────────────────────────────────────────────────
 
   if (!isConnected) {
     return (
@@ -161,6 +196,9 @@ export default function DemoPanel() {
       </div>
     );
   }
+
+  const isRevoking = revokeIsPending || revokeConfirming;
+  const wrongNetwork = chainId !== mainnet.id;
 
   const inputClass = `
     w-full px-4 py-3 rounded-lg
@@ -179,28 +217,21 @@ export default function DemoPanel() {
 
   return (
     <div className="space-y-8">
-      {/* Agent + Owner identity banner */}
+
+      {/* Identity banner */}
       {agentWallet && (
         <div className="px-4 py-3 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 space-y-2">
-          {/* Agent wallet row */}
           <div className="flex items-start gap-2">
             <span className="text-base mt-0.5 shrink-0">ᛏ</span>
             <div className="flex-1 min-w-0">
               <span className="text-[#00a8ff]/60">Agent · decryption identity</span>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[#00a8ff] break-all">{agentEns ?? agentWallet}</span>
-                {agentEns && <span className="text-[#00a8ff]/40 shrink-0 break-all">{agentWallet}</span>}
-                <button
-                  onClick={() => navigator.clipboard.writeText(agentWallet)}
-                  title="Copy agent address"
-                  className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto"
-                >
-                  ⎘
-                </button>
+                {agentEns && <span className="text-[#00a8ff]/40 ml-1 break-all">{agentWallet}</span>}
+                <button onClick={() => navigator.clipboard.writeText(agentWallet)} title="Copy" className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto">⎘</button>
               </div>
             </div>
           </div>
-          {/* Owner wallet row */}
           {address && (
             <div className="flex items-start gap-2">
               <span className="text-base mt-0.5 shrink-0">ᚨ</span>
@@ -208,14 +239,8 @@ export default function DemoPanel() {
                 <span className="text-[#14b8a6]/60">Owner · revocation authority</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[#14b8a6] break-all">{ownerEns ?? address}</span>
-                  {ownerEns && <span className="text-[#14b8a6]/40 shrink-0 break-all">{address}</span>}
-                  <button
-                    onClick={() => navigator.clipboard.writeText(address)}
-                    title="Copy owner address"
-                    className="shrink-0 text-[#14b8a6]/40 hover:text-[#14b8a6] transition-colors cursor-pointer ml-auto"
-                  >
-                    ⎘
-                  </button>
+                  {ownerEns && <span className="text-[#14b8a6]/40 ml-1 break-all">{address}</span>}
+                  <button onClick={() => navigator.clipboard.writeText(address)} title="Copy" className="shrink-0 text-[#14b8a6]/40 hover:text-[#14b8a6] transition-colors cursor-pointer ml-auto">⎘</button>
                 </div>
               </div>
             </div>
@@ -226,7 +251,7 @@ export default function DemoPanel() {
       {/* Status bar */}
       {status && (
         <div className={`
-          px-4 py-2.5 rounded-lg text-sm font-mono
+          px-4 py-2.5 rounded-lg text-sm font-mono break-all
           ${status.startsWith("✓")
             ? "bg-[#14b8a6]/10 border border-[#14b8a6]/30 text-[#14b8a6]"
             : status.startsWith("✗")
@@ -238,11 +263,20 @@ export default function DemoPanel() {
         </div>
       )}
 
+      {/* Wrong network warning */}
+      {wrongNetwork && (
+        <div className="px-4 py-2.5 rounded-lg text-sm bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-between">
+          <span>⚠ Switch to Ethereum Mainnet to revoke</span>
+          <button onClick={() => switchChain({ chainId: mainnet.id })} className="ml-4 underline cursor-pointer hover:text-amber-300">Switch</button>
+        </div>
+      )}
+
       {/* Remember */}
       <div className="rounded-xl border border-[#00a8ff]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-[#00a8ff] font-bold text-sm tracking-widest mb-4">ᚠ REMEMBER</h3>
         <p className="text-xs text-gray-500 mb-3">
           Content is encrypted to the agent&apos;s wallet via Lit Protocol, then stored on Filecoin.
+          Owner wallet ({ownerEns ?? address?.slice(0, 8) ?? "…"}) is baked in as the revocation authority.
         </p>
         <textarea
           value={memoryText}
@@ -253,10 +287,10 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRemember}
-          disabled={!memoryText.trim() || loading !== null}
+          disabled={!memoryText.trim() || loading !== null || isRevoking}
           className={btnClass(
             "border-[#00a8ff]/40 text-[#00a8ff] bg-[#00a8ff]/10 hover:bg-[#00a8ff]/20 hover:shadow-[0_0_20px_rgba(0,168,255,0.2)]",
-            !memoryText.trim() || loading !== null
+            !memoryText.trim() || loading !== null || isRevoking
           )}
         >
           {loading === "remember" ? "Encrypting & Storing…" : "Store Memory →"}
@@ -267,7 +301,7 @@ export default function DemoPanel() {
       <div className="rounded-xl border border-[#14b8a6]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-[#14b8a6] font-bold text-sm tracking-widest mb-4">ᛖ RECALL</h3>
         <p className="text-xs text-gray-500 mb-3">
-          The agent uses its key to request decryption from Lit — no wallet signature required.
+          The agent decrypts autonomously using its server key — no wallet signature required.
         </p>
         <input
           value={recallCid}
@@ -277,21 +311,22 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRecall}
-          disabled={!recallCid.trim() || loading !== null}
+          disabled={!recallCid.trim() || loading !== null || isRevoking}
           className={btnClass(
             "border-[#14b8a6]/40 text-[#14b8a6] bg-[#14b8a6]/10 hover:bg-[#14b8a6]/20 hover:shadow-[0_0_20px_rgba(20,184,166,0.2)]",
-            !recallCid.trim() || loading !== null
+            !recallCid.trim() || loading !== null || isRevoking
           )}
         >
           {loading === "recall" ? "Decrypting…" : "Recall Memory →"}
         </button>
       </div>
 
-      {/* Revoke */}
+      {/* Revoke — browser wallet signing */}
       <div className="rounded-xl border border-red-500/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
-        <h3 className="text-red-400 font-bold text-sm tracking-widest mb-4">ᛉ REVOKE ACCESS</h3>
-        <p className="text-xs text-gray-500 mb-3">
-          You hold the lock. Revoke the agent&apos;s decryption rights — permanently.
+        <h3 className="text-red-400 font-bold text-sm tracking-widest mb-1">ᛉ REVOKE ACCESS</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Your wallet signs directly on-chain. MetaMask will open — you pay ~$0.05 gas.
+          No server involvement. <span className="text-red-400/60">Permanent.</span>
         </p>
         <input
           value={revokeAgent}
@@ -301,14 +336,30 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRevoke}
-          disabled={!revokeAgent.trim() || loading !== null}
+          disabled={!revokeAgent.trim() || isRevoking || loading !== null}
           className={btnClass(
-            "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
-            !revokeAgent.trim() || loading !== null
+            wrongNetwork
+              ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+              : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
+            !revokeAgent.trim() || isRevoking || loading !== null
           )}
         >
-          {loading === "revoke" ? "Revoking…" : "Revoke Access →"}
+          {wrongNetwork
+            ? "Switch to Mainnet →"
+            : isRevoking
+              ? revokeIsPending ? "Waiting for MetaMask…" : "Confirming on-chain…"
+              : "Revoke Access → MetaMask"}
         </button>
+        {revokeTxHash && (
+          <a
+            href={`https://etherscan.io/tx/${revokeTxHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate"
+          >
+            ↗ etherscan.io/tx/{revokeTxHash.slice(0, 20)}…
+          </a>
+        )}
       </div>
 
       {/* Memory feed */}
