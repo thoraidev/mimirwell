@@ -5,14 +5,48 @@
  * Body: { cid: string, ownerWallet?: string }
  * Returns: { content: string, status: "decrypted" }
  *       OR { status: "denied", reason: "..." }
+ *
+ * Revocation check: in-memory cache first (fast), then on-chain contract (fallback).
+ * This means browser-wallet or Etherscan revokes are honoured automatically.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createPublicClient, http } from "viem";
+import { mainnet } from "viem/chains";
 import { decryptWithAgentKey, getAgentAddress, type EncryptedMemory } from "@/lib/lit";
 import { fetchFromFilecoin } from "@/lib/lighthouse";
-import { isRevoked } from "@/app/api/revoke/route";
+import { isRevokedCached, REVOCATION_CONTRACT, REVOCATION_ABI } from "@/lib/revoke-core";
 import { tryResolveAddress } from "@/lib/ens";
 import { logRecall } from "@/lib/activity-log";
+
+const publicClient = createPublicClient({
+  chain: mainnet,
+  transport: http("https://ethereum-rpc.publicnode.com"),
+});
+
+// Check revocation: cache first, then on-chain fallback
+async function checkRevoked(ownerWallet: string, agentWallet: string): Promise<boolean> {
+  const owner = ownerWallet.toLowerCase();
+  const agent = agentWallet.toLowerCase();
+
+  // Fast path: in-memory cache
+  if (isRevokedCached(owner, agent)) return true;
+
+  // Slow path: query the contract directly
+  // This honours revokes done via MetaMask, Etherscan, or any external wallet
+  try {
+    const revoked = await publicClient.readContract({
+      address: REVOCATION_CONTRACT,
+      abi: REVOCATION_ABI,
+      functionName: "isRevoked",
+      args: [ownerWallet as `0x${string}`, agentWallet as `0x${string}`],
+    });
+    return !!revoked;
+  } catch (err) {
+    console.warn("[/api/recall] On-chain revocation check failed (non-fatal):", err);
+    return false; // fail open — better than blocking valid recalls
+  }
+}
 
 export async function POST(req: NextRequest) {
   const agentAddress = getAgentAddress();
@@ -33,19 +67,23 @@ export async function POST(req: NextRequest) {
     // 1. Fetch encrypted blob from Filecoin
     const blob = await fetchFromFilecoin(cid);
 
-    // 2. Resolve owner wallet (ENS or hex)
-    const rawOwnerFromBlob = rawOwner ?? blob.ownerWallet ?? blob.wallet;
+    // 2. Resolve owner wallet — prefer value stored in blob (source of truth)
+    //    Falls back to caller-supplied value, then blob.wallet field
+    const rawOwnerFromBlob = blob.ownerWallet ?? blob.wallet ?? rawOwner;
     const ownerAddress = rawOwnerFromBlob
       ? await tryResolveAddress(rawOwnerFromBlob)
       : null;
 
-    // 3. Check revocation cache (on-chain source of truth checked by Lit at decrypt time)
-    if (ownerAddress && isRevoked(ownerAddress.toLowerCase(), agentAddress.toLowerCase())) {
-      logRecall({ agentWallet: agentAddress, cid, success: false, denied: true });
-      return NextResponse.json(
-        { status: "denied", reason: "Access revoked by owner" },
-        { status: 403 }
-      );
+    // 3. Check revocation — cache + on-chain fallback
+    if (ownerAddress) {
+      const revoked = await checkRevoked(ownerAddress.toLowerCase(), agentAddress.toLowerCase());
+      if (revoked) {
+        logRecall({ agentWallet: agentAddress, cid, success: false, denied: true });
+        return NextResponse.json(
+          { status: "denied", reason: "Access revoked by owner" },
+          { status: 403 }
+        );
+      }
     }
 
     // 4. Build EncryptedMemory object
@@ -57,7 +95,6 @@ export async function POST(req: NextRequest) {
     };
 
     // 5. Decrypt server-side using the agent's private key
-    // Lit Protocol enforces the ACC (including contract revocation check) here
     try {
       const content = await decryptWithAgentKey(encrypted);
       logRecall({ agentWallet: agentAddress, cid, success: true });
