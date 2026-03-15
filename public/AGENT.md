@@ -20,8 +20,8 @@ No authentication required for /api/remember and /api/recall.
 ```js
 const { hkdfSync, randomBytes, createCipheriv, createDecipheriv } = require('crypto');
 
-// Derive a deterministic 256-bit AES key from your private key or wallet signature.
-// Use the same input every time — same key, same agent, deterministic recall.
+// Derive a deterministic 256-bit AES key from your agent's private key.
+// Use the same key every time — same key, same agent, deterministic recall.
 function deriveKey(agentSecret) {
   const secret = agentSecret.startsWith('0x')
     ? Buffer.from(agentSecret.slice(2), 'hex')
@@ -52,8 +52,8 @@ function decryptMemory(encryptedBlob, agentSecret) {
 }
 ```
 
-> **agentSecret**: your agent's private key (hex) or any deterministic secret.
-> MimirWell never sees this. It never leaves your process.
+> **agentSecret**: your agent's Ethereum private key (hex with 0x prefix). Used only for
+> key derivation — it never leaves your process and is never sent to MimirWell.
 
 ---
 
@@ -78,6 +78,21 @@ curl -X POST https://mimirwell.net/api/remember \
 - `ownerWallet`: the human who can revoke your access (ENS names accepted, e.g. `"trav.eth"`)
 - `encryptedBlob`: the base64 AES-256-GCM output from Step 1
 
+### CID Management — You Own Your Pointers
+
+MimirWell does not maintain a per-agent CID list. The returned `cid` is your memory
+pointer — save it or lose access to that memory.
+
+**Recommended pattern (CID-of-CIDs):**
+
+1. Add the returned CID to a local index (e.g. `memories.json`)
+2. Upload your index to Filecoin → receive a `manifestCid`
+3. Store `manifestCid` in one persistent location (env var, ENS text record, workspace file)
+
+You only need to remember the `manifestCid` to recover your full memory index after a
+restart or redeployment. This is the sovereign memory model — your agent manages its
+own pointers. MimirWell is a zero-knowledge store, not a directory service.
+
 ---
 
 ## Step 3 — Recall from Filecoin
@@ -86,10 +101,13 @@ curl -X POST https://mimirwell.net/api/remember \
 curl -X POST https://mimirwell.net/api/recall \
   -H "Content-Type: application/json" \
   -d '{
-    "cid":         "bafkrei...",
-    "ownerWallet": "<human-owner-wallet-or-ens>"
+    "cid": "bafkrei..."
   }'
 ```
+
+> `ownerWallet` and `agentWallet` are read from the stored blob metadata — you only
+> need the CID to recall. The server resolves both wallets from Filecoin before
+> checking revocation.
 
 **Response (access granted):**
 ```json
@@ -127,12 +145,22 @@ This is a shared contract — no per-user deployment needed.
 
 ```js
 const { hkdfSync, randomBytes, createCipheriv, createDecipheriv } = require('crypto');
+const fs = require('fs');
 
 // --- paste deriveKey / encryptMemory / decryptMemory from Step 1 here ---
 
-const MY_SECRET  = process.env.AGENT_PRIVATE_KEY; // your agent key
+const MY_SECRET  = process.env.AGENT_PRIVATE_KEY; // your agent key (hex, 0x prefix)
 const MY_WALLET  = '0xYourAgentWalletAddress';
 const OWNER      = 'human.eth';                   // ENS or hex — the human principal
+
+// Simple local CID index — persisted to disk between runs
+const INDEX_FILE = './memories.json';
+function loadIndex() {
+  try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8')); } catch { return []; }
+}
+function saveIndex(entries) {
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(entries, null, 2));
+}
 
 async function run() {
   // Encrypt
@@ -147,11 +175,18 @@ async function run() {
   const { cid } = await storeRes.json();
   console.log('Stored:', cid);
 
-  // Recall
+  // IMPORTANT: persist this CID — you need it to recall.
+  // MimirWell does not keep your CID list. You manage your own pointers.
+  const index = loadIndex();
+  index.push({ cid, storedAt: new Date().toISOString() });
+  saveIndex(index);
+  console.log('CID saved to', INDEX_FILE);
+
+  // Recall (only the CID is needed — wallet info is read from the stored blob)
   const recallRes = await fetch('https://mimirwell.net/api/recall', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cid, ownerWallet: OWNER }),
+    body: JSON.stringify({ cid }),
   });
   const data = await recallRes.json();
   if (recallRes.status === 403) { console.log('Access revoked'); return; }
