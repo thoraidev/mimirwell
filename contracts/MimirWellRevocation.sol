@@ -8,7 +8,7 @@ pragma solidity ^0.8.20;
  * One contract. Deployed once. Every agent on the MimirWell network uses it.
  *
  * Any owner can revoke any agent wallet's decrypt rights.
- * Lit Protocol checks isRevoked() at every decrypt attempt — no server in the loop.
+ * MimirWell server checks isRevoked() at every recall attempt — enforced before returning the encrypted blob.
  *
  * Gas economics:
  *   - Deploy (once, ever):        ~$10-15
@@ -35,7 +35,7 @@ contract MimirWellRevocation {
     }
 
     /// @notice Returns true if the agent has been revoked by this owner.
-    /// @dev Called by Lit Protocol ACC at every decrypt attempt.
+    /// @dev Called by MimirWell server before returning encrypted blobs. Also callable by external agents.
     function isRevoked(address owner, address agent) external view returns (bool) {
         return revoked[owner][agent];
     }
