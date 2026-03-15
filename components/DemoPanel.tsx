@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId, useSignMessage } from "wagmi";
+import { useAccount, useWriteContract, useSwitchChain, useChainId, useSignMessage } from "wagmi";
+import { useTxReceipt } from "@/lib/useTxReceipt";
 import { mainnet } from "wagmi/chains";
 import MemoryCard, { type MemoryState } from "./MemoryCard";
 
@@ -94,11 +95,11 @@ export default function DemoPanel() {
 
   // Contract write — revoke
   const { writeContract: writeRevoke, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
-  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({ hash: revokeTxHash, pollingInterval: 4000, timeout: 0 });
+  const { confirmed: revokeConfirmed, failed: revokeTxFailed, polling: revokeConfirming } = useTxReceipt(revokeTxHash);
 
   // Contract write — reinstate
   const { writeContract: writeReinstate, data: reinstateTxHash, isPending: reinstateIsPending, error: reinstateError } = useWriteContract();
-  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({ hash: reinstateTxHash, pollingInterval: 4000, timeout: 0 });
+  const { confirmed: reinstateConfirmed, failed: reinstateTxFailed, polling: reinstateConfirming } = useTxReceipt(reinstateTxHash);
 
   // Derived crypto key — persists for the session, never leaves the browser
   const cryptoKeyRef = useRef<CryptoKey | null>(null);
@@ -148,6 +149,9 @@ export default function DemoPanel() {
   useEffect(() => {
     if (revokeError) setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
   }, [revokeError]);
+  useEffect(() => {
+    if (revokeTxFailed) setStatus("✗ Transaction reverted on-chain");
+  }, [revokeTxFailed]);
 
   // Reinstate tx lifecycle
   useEffect(() => { if (reinstateIsPending) setStatus("Confirm the reinstatement in MetaMask…"); }, [reinstateIsPending]);
@@ -162,6 +166,9 @@ export default function DemoPanel() {
   useEffect(() => {
     if (reinstateError) setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
   }, [reinstateError]);
+  useEffect(() => {
+    if (reinstateTxFailed) setStatus("✗ Transaction reverted on-chain");
+  }, [reinstateTxFailed]);
 
   // ─── Key derivation ───────────────────────────────────────────────────────
 

@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import {
   useAccount,
   useWriteContract,
-  useWaitForTransactionReceipt,
   useSwitchChain,
   useChainId,
+  useEnsAddress,
 } from "wagmi";
+import { normalize } from "viem/ens";
 import { mainnet } from "wagmi/chains";
+import { useTxReceipt } from "@/lib/useTxReceipt";
 
 // ─── Revocation contract ──────────────────────────────────────────────────────
 
@@ -31,9 +33,6 @@ const REVOCATION_ABI = [
   },
 ] as const;
 
-// Pre-filled demo agent — thorai.eth
-const DEMO_AGENT = "0x8884AE2D5A381833565A8AAe6BD38bc3E4520412";
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function OwnerControls() {
@@ -43,12 +42,13 @@ export default function OwnerControls() {
 
   const wrongNetwork = isConnected && chainId !== mainnet.id;
 
-  const [agentAddress, setAgentAddress] = useState(DEMO_AGENT);
-  const [agentEns, setAgentEns] = useState<string | null>("thorai.eth");
+  // Raw input — accepts ENS name or hex address
+  const [agentInput, setAgentInput] = useState("");
+  const [normalizedEns, setNormalizedEns] = useState<string | undefined>();
   const [ownerEns, setOwnerEns] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  // ── Wagmi hooks — own instances, independent of DemoPanel ─────────────────
+  // ── Wagmi hooks ───────────────────────────────────────────────────────────
   const {
     writeContract: writeRevoke,
     data: revokeTxHash,
@@ -56,8 +56,8 @@ export default function OwnerControls() {
     error: revokeError,
   } = useWriteContract();
 
-  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } =
-    useWaitForTransactionReceipt({ hash: revokeTxHash, pollingInterval: 4000, timeout: 0 });
+  const { confirmed: revokeConfirmed, failed: revokeTxFailed, polling: revokeConfirming } =
+    useTxReceipt(revokeTxHash);
 
   const {
     writeContract: writeReinstate,
@@ -66,10 +66,43 @@ export default function OwnerControls() {
     error: reinstateError,
   } = useWriteContract();
 
-  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } =
-    useWaitForTransactionReceipt({ hash: reinstateTxHash, pollingInterval: 4000, timeout: 0 });
+  const { confirmed: reinstateConfirmed, failed: reinstateTxFailed, polling: reinstateConfirming } =
+    useTxReceipt(reinstateTxHash);
 
-  // ── ENS: resolve connected wallet (owner) ─────────────────────────────────
+  // ── ENS forward resolution (ENS name → address) ───────────────────────────
+  // Normalize in useEffect to safely handle viem/ens normalize() exceptions
+  useEffect(() => {
+    const trimmed = agentInput.trim();
+    const looksLikeEns = trimmed.includes(".") && !trimmed.startsWith("0x");
+    if (!looksLikeEns) {
+      setNormalizedEns(undefined);
+      return;
+    }
+    try {
+      setNormalizedEns(normalize(trimmed));
+    } catch {
+      setNormalizedEns(undefined);
+    }
+  }, [agentInput]);
+
+  // useEnsAddress resolves ENS name → hex address via mainnet
+  const { data: ensResolved, isLoading: ensLoading } = useEnsAddress({
+    name: normalizedEns,
+    chainId: mainnet.id,
+  });
+
+  // ── Resolved address — what actually gets passed to the contract ──────────
+  const trimmedInput = agentInput.trim();
+  const inputIsEns = !!normalizedEns;
+  const agentAddress: string | null = inputIsEns
+    ? (ensResolved ?? null)                               // ENS → resolved hex (or null if unresolved)
+    : trimmedInput.startsWith("0x") && trimmedInput.length === 42
+    ? trimmedInput                                        // direct hex address
+    : null;
+
+  const isValidAddress = !!agentAddress;
+
+  // ── ENS reverse lookup for connected wallet (owner display) ───────────────
   useEffect(() => {
     if (!address) return;
     setOwnerEns(null);
@@ -78,23 +111,6 @@ export default function OwnerControls() {
       .then((d) => setOwnerEns(d.name ?? null))
       .catch(() => {});
   }, [address]);
-
-  // ── ENS: reverse-lookup agent address as user types ───────────────────────
-  useEffect(() => {
-    if (agentAddress.toLowerCase() === DEMO_AGENT.toLowerCase()) {
-      setAgentEns("thorai.eth");
-      return;
-    }
-    if (!agentAddress.startsWith("0x") || agentAddress.length !== 42) {
-      setAgentEns(null);
-      return;
-    }
-    setAgentEns(null);
-    fetch(`/api/ens-lookup?address=${encodeURIComponent(agentAddress)}`)
-      .then((r) => r.json())
-      .then((d) => setAgentEns(d.name ?? null))
-      .catch(() => {});
-  }, [agentAddress]);
 
   // ── Revoke lifecycle ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -107,15 +123,16 @@ export default function OwnerControls() {
 
   useEffect(() => {
     if (revokeConfirmed && revokeTxHash)
-      setStatus(
-        `✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`
-      );
+      setStatus(`✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`);
   }, [revokeConfirmed, revokeTxHash]);
 
   useEffect(() => {
-    if (revokeError)
-      setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
+    if (revokeError) setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
   }, [revokeError]);
+
+  useEffect(() => {
+    if (revokeTxFailed) setStatus("✗ Transaction reverted on-chain");
+  }, [revokeTxFailed]);
 
   // ── Reinstate lifecycle ───────────────────────────────────────────────────
   useEffect(() => {
@@ -128,24 +145,26 @@ export default function OwnerControls() {
 
   useEffect(() => {
     if (reinstateConfirmed && reinstateTxHash)
-      setStatus(
-        `✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`
-      );
+      setStatus(`✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`);
   }, [reinstateConfirmed, reinstateTxHash]);
 
   useEffect(() => {
-    if (reinstateError)
-      setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
+    if (reinstateError) setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
   }, [reinstateError]);
 
+  useEffect(() => {
+    if (reinstateTxFailed) setStatus("✗ Transaction reverted on-chain");
+  }, [reinstateTxFailed]);
+
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const isValidAddress = agentAddress.startsWith("0x") && agentAddress.length === 42;
   const isBusy = revokeIsPending || revokeConfirming || reinstateIsPending || reinstateConfirming;
-  const isDemo = agentAddress.toLowerCase() === DEMO_AGENT.toLowerCase();
+  const statusIsSuccess = status?.startsWith("✓");
+  const statusIsError   = status?.startsWith("✗");
 
   const handleRevoke = () => {
-    if (!isValidAddress || isBusy) return;
+    if (!agentAddress || isBusy) return;
     if (wrongNetwork) { switchChain?.({ chainId: mainnet.id }); return; }
+    setStatus(null);
     writeRevoke({
       address: REVOCATION_CONTRACT,
       abi: REVOCATION_ABI,
@@ -155,8 +174,9 @@ export default function OwnerControls() {
   };
 
   const handleReinstate = () => {
-    if (!isValidAddress || isBusy) return;
+    if (!agentAddress || isBusy) return;
     if (wrongNetwork) { switchChain?.({ chainId: mainnet.id }); return; }
+    setStatus(null);
     writeReinstate({
       address: REVOCATION_CONTRACT,
       abi: REVOCATION_ABI,
@@ -165,8 +185,38 @@ export default function OwnerControls() {
     });
   };
 
-  const statusIsSuccess = status?.startsWith("✓");
-  const statusIsError   = status?.startsWith("✗");
+  // ── Input hint text ───────────────────────────────────────────────────────
+  const renderInputHint = () => {
+    if (!agentInput.trim()) return null;
+
+    if (inputIsEns) {
+      if (ensLoading) return (
+        <p className="mt-1.5 text-xs text-gray-500">Resolving {agentInput.trim()}…</p>
+      );
+      if (ensResolved) return (
+        <p className="mt-1.5 text-xs" style={{ color: "#14b8a6" }}>
+          {agentInput.trim()} → {ensResolved.slice(0, 8)}…{ensResolved.slice(-6)} ✓
+        </p>
+      );
+      return (
+        <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.7)" }}>
+          ENS name not found on mainnet
+        </p>
+      );
+    }
+
+    if (!trimmedInput.startsWith("0x") || trimmedInput.length !== 42) {
+      return (
+        <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.7)" }}>
+          Enter a wallet address (0x…) or ENS name (name.eth)
+        </p>
+      );
+    }
+
+    return null;
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <section
@@ -183,25 +233,19 @@ export default function OwnerControls() {
             background: "rgba(245,158,11,0.08)",
           }}
         >
-          <span
-            className="w-1.5 h-1.5 rounded-full animate-pulse"
-            style={{ background: "#f59e0b" }}
-          />
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#f59e0b" }} />
           OWNER CONTROLS
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">The Kill Switch</h2>
         <p className="text-gray-500 text-sm max-w-xl mx-auto">
-          Connect as the human owner. Enter any agent&apos;s wallet address.
+          Connect as the human owner. Enter any agent&apos;s wallet address or ENS name.
           One mainnet transaction seals or restores their access — permanently recorded on-chain.
         </p>
       </div>
 
       <div
         className="rounded-xl border p-6"
-        style={{
-          borderColor: "rgba(245,158,11,0.2)",
-          background: "rgba(245,158,11,0.025)",
-        }}
+        style={{ borderColor: "rgba(245,158,11,0.2)", background: "rgba(245,158,11,0.025)" }}
       >
         {/* ── Not connected ─────────────────────────────────────────────── */}
         {!isConnected && (
@@ -211,7 +255,9 @@ export default function OwnerControls() {
               Connect your wallet via the button in the top-right corner.
             </p>
             <p className="text-xs text-gray-600">
-              You&apos;ll be the <span style={{ color: "#f59e0b" }}>human owner</span> — the wallet that holds the kill switch.
+              You&apos;ll be the{" "}
+              <span style={{ color: "#f59e0b" }}>human owner</span>{" "}
+              — the wallet that holds the kill switch.
             </p>
           </div>
         )}
@@ -223,10 +269,7 @@ export default function OwnerControls() {
             {/* Owner identity row */}
             <div
               className="flex items-center gap-3 px-4 py-3 rounded-lg border"
-              style={{
-                borderColor: "rgba(245,158,11,0.15)",
-                background: "rgba(245,158,11,0.04)",
-              }}
+              style={{ borderColor: "rgba(245,158,11,0.15)", background: "rgba(245,158,11,0.04)" }}
             >
               <span className="text-lg shrink-0" style={{ color: "#f59e0b" }}>ᚨ</span>
               <div className="flex-1 min-w-0">
@@ -240,15 +283,14 @@ export default function OwnerControls() {
                   </div>
                 )}
               </div>
-              {wrongNetwork && (
+              {wrongNetwork ? (
                 <button
                   onClick={() => switchChain?.({ chainId: mainnet.id })}
                   className="shrink-0 text-xs px-3 py-1.5 rounded border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors"
                 >
                   Switch to Mainnet
                 </button>
-              )}
-              {!wrongNetwork && (
+              ) : (
                 <span
                   className="shrink-0 text-xs px-2 py-1 rounded border font-mono"
                   style={{ borderColor: "rgba(20,184,166,0.3)", color: "#14b8a6" }}
@@ -261,49 +303,33 @@ export default function OwnerControls() {
             {/* Agent address input */}
             <div>
               <label className="block text-xs text-gray-500 mb-2 uppercase tracking-widest">
-                Agent address to control
+                Agent address or ENS name
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={agentAddress}
-                  onChange={(e) => setAgentAddress(e.target.value.trim())}
-                  className="w-full px-4 py-3 rounded-lg border bg-transparent font-mono text-sm text-white focus:outline-none transition-colors pr-28"
-                  style={{
-                    borderColor: isValidAddress
-                      ? "rgba(245,158,11,0.35)"
-                      : "rgba(255,255,255,0.08)",
-                    background: "rgba(0,0,0,0.3)",
-                  }}
-                  placeholder="0x… agent wallet address"
-                  spellCheck={false}
-                />
-                {agentEns && (
-                  <span
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono pointer-events-none"
-                    style={{ color: "#f59e0b" }}
-                  >
-                    {agentEns}
-                  </span>
-                )}
-              </div>
-              {isDemo && (
-                <p className="mt-1.5 text-xs text-gray-600">
-                  ↑ Pre-filled: thorai.eth — the MimirWell demo agent (ThorAI)
-                </p>
-              )}
-              {!isValidAddress && agentAddress.length > 0 && (
-                <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.7)" }}>
-                  Enter a valid wallet address (0x… 42 characters)
-                </p>
-              )}
+              <input
+                type="text"
+                value={agentInput}
+                onChange={(e) => setAgentInput(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border bg-transparent font-mono text-sm text-white focus:outline-none transition-colors"
+                style={{
+                  borderColor: isValidAddress
+                    ? "rgba(245,158,11,0.4)"
+                    : agentInput.trim()
+                    ? "rgba(255,255,255,0.1)"
+                    : "rgba(245,158,11,0.2)",
+                  background: "rgba(0,0,0,0.3)",
+                }}
+                placeholder="thorai.eth  or  0x8884…"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              {renderInputHint()}
             </div>
 
             {/* Revoke / Reinstate */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 onClick={handleRevoke}
-                disabled={!isValidAddress || isBusy || wrongNetwork}
+                disabled={!isValidAddress || isBusy || wrongNetwork || ensLoading}
                 className="px-4 py-3 rounded-lg border text-sm font-bold tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110"
                 style={{
                   borderColor: "rgba(245,158,11,0.45)",
@@ -311,16 +337,14 @@ export default function OwnerControls() {
                   background: "rgba(245,158,11,0.08)",
                 }}
               >
-                {revokeIsPending
-                  ? "Waiting for MetaMask…"
-                  : revokeConfirming
-                  ? "Confirming on-chain…"
+                {revokeIsPending ? "Waiting for MetaMask…"
+                  : revokeConfirming ? "Confirming on-chain…"
                   : "ᛉ REVOKE ACCESS"}
               </button>
 
               <button
                 onClick={handleReinstate}
-                disabled={!isValidAddress || isBusy || wrongNetwork}
+                disabled={!isValidAddress || isBusy || wrongNetwork || ensLoading}
                 className="px-4 py-3 rounded-lg border text-sm font-bold tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110"
                 style={{
                   borderColor: "rgba(167,139,250,0.35)",
@@ -328,10 +352,8 @@ export default function OwnerControls() {
                   background: "rgba(167,139,250,0.05)",
                 }}
               >
-                {reinstateIsPending
-                  ? "Waiting for MetaMask…"
-                  : reinstateConfirming
-                  ? "Confirming on-chain…"
+                {reinstateIsPending ? "Waiting for MetaMask…"
+                  : reinstateConfirming ? "Confirming on-chain…"
                   : "ᚱ REINSTATE ACCESS"}
               </button>
             </div>
