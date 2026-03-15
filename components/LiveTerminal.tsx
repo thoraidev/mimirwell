@@ -93,6 +93,7 @@ interface TerminalLine {
   color?: string;
   visible: string; // current visible portion (typewriter)
   done: boolean;
+  historical?: boolean; // pre-existing on load — rendered instantly, dimmed
 }
 
 const TYPEWRITER_MS = 18; // ms per character
@@ -103,6 +104,7 @@ export default function LiveTerminal() {
   const [lines, setLines] = useState<TerminalLine[]>([]);
   const seenIdsRef = useRef<Set<string>>(new Set()); // ref avoids stale closure in poll loop
   const activeRef = useRef(true);
+  const initialLoadDoneRef = useRef(false); // first poll renders history instantly; subsequent polls typewrite
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineQueueRef = useRef<TerminalLine[]>([]);
   const typingRef = useRef(false);
@@ -159,12 +161,55 @@ export default function LiveTerminal() {
         if (!res.ok) return;
         const { events }: { events: ActivityEvent[] } = await res.json();
 
+        // ── First load: render all existing events instantly, dimmed ──────────
+        if (!initialLoadDoneRef.current) {
+          initialLoadDoneRef.current = true;
+          events.forEach(e => seenIdsRef.current.add(e.id));
+
+          if (events.length > 0) {
+            const historicalLines: TerminalLine[] = [];
+            for (const event of events) {
+              const rendered = renderLines(event);
+              rendered.forEach((rl, i) => {
+                historicalLines.push({
+                  key: `${event.id}-${i}`,
+                  text: rl.text,
+                  color: rl.color,
+                  visible: rl.text,
+                  done: true,
+                  historical: true,
+                });
+              });
+              historicalLines.push({
+                key: `${event.id}-sep`,
+                text: "",
+                color: undefined,
+                visible: "",
+                done: true,
+                historical: true,
+              });
+            }
+            // Separator — everything below this line is live
+            historicalLines.push({
+              key: "live-separator",
+              text: "── live ────────────────────────────────────────────",
+              color: "#374151",
+              visible: "── live ────────────────────────────────────────────",
+              done: true,
+              historical: true,
+            });
+            setLines(historicalLines);
+          }
+          return; // finally still runs — polling continues
+        }
+
+        // ── Subsequent polls: new events only, full typewriter treatment ──────
         const newEvents = events.filter(e => !seenIdsRef.current.has(e.id));
         if (newEvents.length > 0) {
           const newLines: TerminalLine[] = [];
 
           for (const event of newEvents) {
-            seenIdsRef.current.add(event.id); // mutate ref directly — no stale closure
+            seenIdsRef.current.add(event.id);
             const rendered = renderLines(event);
             rendered.forEach((rl, i) => {
               newLines.push({
@@ -175,7 +220,6 @@ export default function LiveTerminal() {
                 done: false,
               });
             });
-            // Blank separator line
             newLines.push({ key: `${event.id}-sep`, text: "", color: undefined, visible: "", done: true });
           }
 
@@ -239,7 +283,11 @@ export default function LiveTerminal() {
             <div
               key={line.key}
               className="whitespace-pre"
-              style={{ color: line.color ?? "#4b5563", minHeight: "1.25rem" }}
+              style={{
+                color: line.color ?? "#4b5563",
+                minHeight: "1.25rem",
+                opacity: line.historical ? 0.38 : 1,
+              }}
             >
               {line.visible}
               {!line.done && line.text && (
