@@ -26,11 +26,11 @@ export default function Home() {
         <section className="text-center px-6 pt-20 pb-16 max-w-4xl mx-auto">
           {/* Rune decorators */}
           <div className="flex justify-center gap-6 mb-8 text-3xl" style={{ color: "rgba(0,168,255,0.3)" }}>
-            <span className="animate-pulse" style={{ animationDelay: "0ms" }}>ᚠ</span>
-            <span className="animate-pulse" style={{ animationDelay: "200ms", color: "rgba(20,184,166,0.3)" }}>ᛗ</span>
-            <span className="animate-pulse" style={{ animationDelay: "400ms", color: "rgba(245,158,11,0.3)" }}>ᛁ</span>
-            <span className="animate-pulse" style={{ animationDelay: "600ms", color: "rgba(0,168,255,0.3)" }}>ᚱ</span>
-            <span className="animate-pulse" style={{ animationDelay: "800ms", color: "rgba(20,184,166,0.3)" }}>ᛖ</span>
+            <span className="animate-pulse" style={{ animationDelay: "0ms" }}>ᛗ</span>
+            <span className="animate-pulse" style={{ animationDelay: "200ms", color: "rgba(20,184,166,0.3)" }}>ᛁ</span>
+            <span className="animate-pulse" style={{ animationDelay: "400ms", color: "rgba(245,158,11,0.3)" }}>ᛗ</span>
+            <span className="animate-pulse" style={{ animationDelay: "600ms", color: "rgba(0,168,255,0.3)" }}>ᛁ</span>
+            <span className="animate-pulse" style={{ animationDelay: "800ms", color: "rgba(20,184,166,0.3)" }}>ᚱ</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight mb-6">
