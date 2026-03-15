@@ -43,7 +43,7 @@ function displayWallet(address: string, ensName?: string | null): string {
 function renderLines(event: ActivityEvent): { text: string; color?: string; href?: string }[] {
   const rune = RUNE[event.type] ?? "ᛟ";
   const color = COLOR[event.type] ?? "#9ca3af";
-  const lines: { text: string; color?: string }[] = [];
+  const lines: { text: string; color?: string; href?: string }[] = [];
 
   const agent = displayWallet(event.agentWallet, event.agentWalletName);
   const owner = event.ownerWallet
