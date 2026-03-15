@@ -103,8 +103,6 @@ export default function DemoPanel() {
   const cryptoKeyRef = useRef<CryptoKey | null>(null);
   const [keyReady, setKeyReady] = useState(false);
 
-  const [agentWallet, setAgentWallet] = useState<string>("");
-  const [agentEns, setAgentEns] = useState<string | null>(null);
   const [ownerEns, setOwnerEns] = useState<string | null>(null);
   const [memoryText, setMemoryText] = useState("");
   const [recallCid, setRecallCid] = useState("");
@@ -122,23 +120,12 @@ export default function DemoPanel() {
     } catch { setter(null); }
   }, []);
 
-  // Fetch agent wallet on mount
+  // Connected wallet is the agent — sync revokeAgent and resolve ENS on address change
   useEffect(() => {
-    fetch("/api/agent-info")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.agentWallet) {
-          setAgentWallet(d.agentWallet);
-          setRevokeAgent(d.agentWallet);
-          resolveEns(d.agentWallet, setAgentEns);
-        }
-      })
-      .catch(() => {});
-  }, [resolveEns]);
-
-  // Resolve connected wallet ENS
-  useEffect(() => {
-    if (address) resolveEns(address, setOwnerEns);
+    if (address) {
+      setRevokeAgent(address);
+      resolveEns(address, setOwnerEns);
+    }
   }, [address, resolveEns]);
 
   // Clear derived key when wallet changes
@@ -197,14 +184,14 @@ export default function DemoPanel() {
         body: JSON.stringify({
           encryptedBlob,
           ownerWallet: address,
-          agentWallet: agentWallet || undefined,
+          agentWallet: address,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setMemories((prev) => [
-        { cid: data.cid, content: memoryText.trim(), wallet: data.agentWallet ?? address, state: "stored", timestamp: Date.now() },
+        { cid: data.cid, content: memoryText.trim(), wallet: address ?? "", state: "stored", timestamp: Date.now() },
         ...prev,
       ]);
       setMemoryText("");
@@ -225,13 +212,13 @@ export default function DemoPanel() {
       const res = await fetch("/api/recall", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cid: recallCid.trim(), ownerWallet: address }),
+        body: JSON.stringify({ cid: recallCid.trim() }),
       });
       const data = await res.json();
 
       if (data.status === "denied") {
         setMemories((prev) => [
-          { cid: recallCid.trim(), wallet: agentWallet || "agent", state: "sealed", timestamp: Date.now() },
+          { cid: recallCid.trim(), wallet: address ?? "agent", state: "sealed", timestamp: Date.now() },
           ...prev,
         ]);
         setStatus("✗ Access denied — revocation confirmed on-chain");
@@ -240,7 +227,7 @@ export default function DemoPanel() {
         const key = await ensureKey();
         const content = await decryptContent(data.encryptedBlob, key);
         setMemories((prev) => [
-          { cid: recallCid.trim(), content, wallet: data.agentWallet ?? agentWallet, state: "recalled", timestamp: Date.now() },
+          { cid: recallCid.trim(), content, wallet: data.agentWallet ?? address ?? "", state: "recalled", timestamp: Date.now() },
           ...prev,
         ]);
         setRecallCid("");
@@ -304,32 +291,29 @@ export default function DemoPanel() {
     <div className="space-y-8">
 
       {/* Identity banner */}
-      {agentWallet && (
+      {address && (
         <div className="px-4 py-3 rounded-lg text-xs font-mono bg-[#00a8ff]/5 border border-[#00a8ff]/20 text-[#00a8ff]/70 space-y-2">
           <div className="flex items-start gap-2">
             <span className="text-base mt-0.5 shrink-0">ᛏ</span>
             <div className="flex-1 min-w-0">
-              <span className="text-[#00a8ff]/60">Agent · revocation target</span>
+              <span className="text-[#00a8ff]/60">Agent · your wallet · encryption identity</span>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[#00a8ff] break-all">{agentEns ?? agentWallet}</span>
-                {agentEns && <span className="text-[#00a8ff]/40 ml-1 break-all">{agentWallet}</span>}
-                <button onClick={() => navigator.clipboard.writeText(agentWallet)} title="Copy" className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto">⎘</button>
+                <span className="text-[#00a8ff] break-all">{ownerEns ?? address}</span>
+                {ownerEns && <span className="text-[#00a8ff]/40 ml-1 break-all">{address}</span>}
+                <button onClick={() => navigator.clipboard.writeText(address)} title="Copy" className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto">⎘</button>
               </div>
             </div>
           </div>
-          {address && (
-            <div className="flex items-start gap-2">
-              <span className="text-base mt-0.5 shrink-0">ᚨ</span>
-              <div className="flex-1 min-w-0">
-                <span className="text-[#14b8a6]/60">Owner · key & revocation authority</span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[#14b8a6] break-all">{ownerEns ?? address}</span>
-                  {ownerEns && <span className="text-[#14b8a6]/40 ml-1 break-all">{address}</span>}
-                  <button onClick={() => navigator.clipboard.writeText(address)} title="Copy" className="shrink-0 text-[#14b8a6]/40 hover:text-[#14b8a6] transition-colors cursor-pointer ml-auto">⎘</button>
-                </div>
+          <div className="flex items-start gap-2">
+            <span className="text-base mt-0.5 shrink-0">ᚨ</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-[#14b8a6]/60">Owner · same wallet · holds the kill switch</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[#14b8a6] break-all">{ownerEns ?? address}</span>
+                {ownerEns && <span className="text-[#14b8a6]/40 ml-1 break-all">{address}</span>}
               </div>
             </div>
-          )}
+          </div>
           {/* Zero-knowledge indicator */}
           <div className="flex items-center gap-2 pt-1 border-t border-[#00a8ff]/10">
             <span className="text-base shrink-0">🔑</span>
@@ -371,7 +355,7 @@ export default function DemoPanel() {
         <h3 className="text-[#00a8ff] font-bold text-sm tracking-widest mb-4">ᚠ REMEMBER</h3>
         <p className="text-xs text-gray-500 mb-3">
           Content is encrypted in your browser before upload — MimirWell never sees the plaintext.
-          Your wallet signature derives the AES-256 key. Owner ({ownerEns ?? address?.slice(0, 8) ?? "…"}) is the revocation authority.
+          Your wallet signature derives the AES-256 key. Only you can decrypt. Only you can revoke.
         </p>
         <textarea
           value={memoryText}
