@@ -53,7 +53,7 @@ export default function Home() {
             {[
               { label: "Storage", value: "Filecoin", sub: "Permanent" },
               { label: "Encryption", value: "AES-256-GCM", sub: "Zero-knowledge" },
-              { label: "Identity", value: "thorai.eth", sub: "On-chain" },
+              { label: "Identity", value: "ENS / Ethereum", sub: "Agent-sovereign" },
               { label: "API", value: "3 endpoints", sub: "Any language" },
             ].map((s) => (
               <div
@@ -218,6 +218,22 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        {/* ── Build Log Link ── */}
+        <div className="px-6 pb-10 max-w-4xl mx-auto text-center -mt-10">
+          <a
+            href="https://github.com/thoraidev/mimirwell"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-xs font-mono transition-colors"
+            style={{ color: "#4b5563" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "#00a8ff")}
+            onMouseLeave={e => (e.currentTarget.style.color = "#4b5563")}
+          >
+            <span>→ Full build log with architecture decisions</span>
+            <span style={{ opacity: 0.4 }}>↗</span>
+          </a>
+        </div>
 
         {/* ── Footer ── */}
         <footer className="border-t px-6 py-8 text-center" style={{ borderColor: "rgba(255,255,255,0.05)" }}>

@@ -69,7 +69,8 @@ function truncateCid(cid: string): string {
 }
 
 function nowUtc(): string {
-  return new Date().toISOString().slice(11, 19); // "HH:MM:SS"
+  // "YYYY-MM-DD HH:MM:SS" UTC
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
 function shortId(): string {
