@@ -83,15 +83,15 @@ export default function Home() {
           </div>
 
           {/* Side-by-side grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-stretch">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
 
             {/* Left: Demo Panel */}
-            <div className="lg:col-span-2 flex flex-col">
+            <div className="lg:col-span-2">
               <DemoPanel />
             </div>
 
             {/* Right: Live Terminal */}
-            <div className="lg:col-span-3 flex flex-col">
+            <div className="lg:col-span-3">
               <div className="flex items-center gap-2 mb-3">
                 <span
                   className="w-1.5 h-1.5 rounded-full animate-pulse"
@@ -102,9 +102,7 @@ export default function Home() {
                 </span>
                 <span className="text-xs text-gray-600 ml-2 hidden sm:inline">— encrypt fragments visible, plaintext never exposed</span>
               </div>
-              <div className="flex-1 flex flex-col min-h-0">
-                <LiveTerminal />
-              </div>
+              <LiveTerminal />
             </div>
 
           </div>
