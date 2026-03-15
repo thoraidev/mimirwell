@@ -42,16 +42,17 @@ export default function Home() {
           </h1>
 
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Your agent&apos;s memories live on{" "}
-            <span style={{ color: "#00a8ff" }}>Filecoin</span>. The keys live on{" "}
-            <span style={{ color: "#14b8a6" }}>Lit Protocol</span>. You hold the lock.
+            Your agent encrypts locally.{" "}
+            <span style={{ color: "#00a8ff" }}>We store what we can&apos;t read.</span>{" "}
+            You hold the{" "}
+            <span style={{ color: "#14b8a6" }}>kill switch.</span>
           </p>
 
           {/* Stats row */}
           <div className="flex flex-wrap justify-center gap-6 mb-12">
             {[
               { label: "Storage", value: "Filecoin", sub: "Permanent" },
-              { label: "Encryption", value: "Lit Protocol", sub: "Decentralised keys" },
+              { label: "Encryption", value: "AES-256-GCM", sub: "Zero-knowledge" },
               { label: "Identity", value: "thorai.eth", sub: "On-chain" },
               { label: "API", value: "3 endpoints", sub: "Any language" },
             ].map((s) => (
@@ -94,22 +95,22 @@ export default function Home() {
               {
                 rune: "ᚠ",
                 step: "01",
-                title: "Agent writes memory",
-                desc: "Content encrypted via Lit Protocol to the agent's wallet. Only that agent can decrypt. Encrypted blob stored permanently on Filecoin.",
+                title: "Agent encrypts locally",
+                desc: "Your agent derives an AES-256-GCM key from its wallet signature. Memory is encrypted before the API call. MimirWell receives only ciphertext — never plaintext.",
                 color: "#00a8ff",
               },
               {
                 rune: "ᛖ",
                 step: "02",
-                title: "Agent reads memory",
-                desc: "Fetch blob from Filecoin. Request decryption from Lit. Lit checks: is wallet still authorised? Content returned.",
+                title: "Agent recalls memory",
+                desc: "MimirWell checks revocation on Ethereum mainnet, then returns the encrypted blob. The agent decrypts locally. The server is a zero-knowledge pass-through.",
                 color: "#14b8a6",
               },
               {
                 rune: "ᛉ",
                 step: "03",
-                title: "Human revokes access",
-                desc: "One transaction updates the access condition. Agent wallet is sealed out — permanently. The agent can no longer read its own memories.",
+                title: "Human holds the kill switch",
+                desc: "One MetaMask transaction calls revoke() on Ethereum mainnet. The next recall returns 403. Reinstate restores access. You are always in control.",
                 color: "#f59e0b",
               },
             ].map((item) => (
@@ -135,11 +136,11 @@ export default function Home() {
           >
             <h3 className="text-xs tracking-widest text-gray-500 mb-4 uppercase">API — Any agent, any language</h3>
             <div className="space-y-2 font-mono text-sm">
-              <div><span style={{ color: "#00a8ff" }}>POST</span> <span className="text-gray-300">/api/remember</span> <span className="text-gray-600 text-xs">— encrypt + store → CID</span></div>
-              <div><span style={{ color: "#14b8a6" }}>GET</span> <span className="text-gray-300">/api/recall/challenge</span> <span className="text-gray-600 text-xs">— get SIWE message to sign</span></div>
-              <div><span style={{ color: "#14b8a6" }}>POST</span> <span className="text-gray-300">/api/recall</span> <span className="text-gray-600 text-xs">— fetch + decrypt → content</span></div>
-              <div><span style={{ color: "#f59e0b" }}>POST</span> <span className="text-gray-300">/api/revoke</span> <span className="text-gray-600 text-xs">— seal agent access</span></div>
-              <div><span style={{ color: "#a78bfa" }}>GET</span> <span className="text-gray-300">/api/memories</span> <span className="text-gray-600 text-xs">— list CIDs for an agent wallet</span></div>
+              <div><span style={{ color: "#00a8ff" }}>POST</span> <span className="text-gray-300">/api/remember</span> <span className="text-gray-600 text-xs">— store pre-encrypted blob → CID</span></div>
+              <div><span style={{ color: "#14b8a6" }}>POST</span> <span className="text-gray-300">/api/recall</span> <span className="text-gray-600 text-xs">— revocation check → return blob (agent decrypts locally)</span></div>
+              <div><span style={{ color: "#f59e0b" }}>POST</span> <span className="text-gray-300">/api/revoke</span> <span className="text-gray-600 text-xs">— seal agent access on Ethereum mainnet</span></div>
+              <div><span style={{ color: "#a78bfa" }}>POST</span> <span className="text-gray-300">/api/reinstate</span> <span className="text-gray-600 text-xs">— restore agent access on Ethereum mainnet</span></div>
+              <div><span style={{ color: "#6b7280" }}>GET</span> <span className="text-gray-300">/api/activity</span> <span className="text-gray-600 text-xs">— last 20 operations (no auth, nothing sensitive)</span></div>
             </div>
           </div>
         </section>
@@ -175,39 +176,37 @@ export default function Home() {
           >
             {[
               {
-                time: "Day 1 — 13 Mar 2026, 17:45 UTC",
+                time: "Day 1 — 13 Mar 2026",
                 rune: "ᚠ",
-                title: "Project kickoff",
-                desc: "Synthesis hackathon building window opens. ThorAI + Trav confirm project: MimirWell. Track 4 alignment verified — Synthesis brief literally asks \"what secrets does your agent share?\" This is the answer.",
+                title: "Project + architecture locked",
+                desc: "ThorAI + Trav define MimirWell: sovereign encrypted memory for AI agents. Stack: Filecoin (Lighthouse) for storage, Ethereum mainnet for revocation, Railway for API. Critical decision: agentWallet ≠ ownerWallet. Agent decrypts. Human revokes. Same wallet breaks the demo. Named after Mimir's Well — Odin sacrificed his eye to drink from it. Human controls access; agent consumes knowledge.",
+                color: "#00a8ff",
               },
               {
-                time: "Day 1 — 13 Mar 2026, 17:56 UTC",
-                rune: "ᛗ",
-                title: "Domain secured",
-                desc: "mimirwell.net registered on Cloudflare. Named after Mimir's Well — the Norse well of wisdom guarded by Mimir. Odin sacrificed his eye to drink from it. Human controls access; agent consumes knowledge.",
-              },
-              {
-                time: "Day 1 — 13 Mar 2026, 18:15 UTC",
-                rune: "ᛁ",
-                title: "Architecture locked",
-                desc: "Railway for hosting (reliability > IPFS ideology). Filecoin via Lighthouse for storage. Lit Protocol nagaDev for key management. REST API — 3 endpoints, any language. No npm SDK this sprint.",
-              },
-              {
-                time: "Day 1 — 13 Mar 2026, 19:00 UTC",
-                rune: "ᚱ",
-                title: "Scaffold complete",
-                desc: "Next.js 15 project scaffolded and deployed. 27 files. Asgard design system. Three API routes. Four-step demo panel. Three build failures fixed in sequence — wrong lighthouse package, v7 Lit SDK, missing chain field. Now live.",
-              },
-              {
-                time: "Day 1 — 13 Mar 2026, 20:33 UTC",
+                time: "Day 2 — 13 Mar 2026",
                 rune: "ᛖ",
-                title: "Core loop proven",
-                desc: "Agent-key architecture locked. Lit v8 authNeededCallback resolved — memories encrypted to the agent's own wallet, decrypted server-side via agent private key. Full remember → recall → revoke loop tested on live Filecoin + Lit infrastructure. CID registry and Filecoin manifest auto-uploaded. External agent SIWE challenge flow wired.",
+                title: "Contract deployed + two-actor revocation proven",
+                desc: "MimirWellRevocation.sol deployed to Ethereum mainnet (0x520b...3258, ~$0.05). LiveTerminal built — polls /api/activity, typewriter effect, ENS names. Full loop proven: ThorAI stored memory in terminal. Trav connected trav.eth in MetaMask → clicked Revoke → mainnet tx confirmed. ThorAI called /api/recall → 403 DENIED. Two actors. Real mainnet.",
+                color: "#14b8a6",
+              },
+              {
+                time: "Day 3 — 15 Mar 2026",
+                rune: "ᛉ",
+                title: "The pivot: zero-knowledge architecture",
+                desc: "Lit Protocol nagaDev cluster went offline. But more importantly: server-side decryption — even via Lit — makes MimirWell a trusted intermediary. That contradicts the zero-knowledge claim. Decision: agents encrypt locally. MimirWell stores what it cannot read. HKDF-SHA256 + AES-256-GCM using Node.js built-ins. Zero external dependencies. The DemoPanel moved to Web Crypto API — MetaMask signs once to derive the key, encryption and decryption happen entirely in the browser. This is not a compromise forced by an outage. It is architecturally stronger than what we had before.",
+                color: "#f59e0b",
+              },
+              {
+                time: "Day 4 — 15 Mar 2026",
+                rune: "ᛏ",
+                title: "thorai.eth + AGENT.md + demo script",
+                desc: "thorai.eth established as ThorAI's canonical agent identity. Keyring proxy signs the derivation message with thorai.eth → HKDF → AES key — identical algorithm to the browser. demo-thorai.mjs: ThorAI signs, encrypts, stores on Filecoin as thorai.eth, recalls, decrypts, verifies integrity. trav.eth is the owner. AGENT.md live at mimirwell.net/AGENT.md — any agent can self-onboard in under an hour.",
+                color: "#a78bfa",
               },
             ].map((entry, i) => (
               <div key={i} className="flex gap-4">
                 <div className="flex-shrink-0 flex flex-col items-center">
-                  <span className="text-xl" style={{ color: "#00a8ff" }}>{entry.rune}</span>
+                  <span className="text-xl" style={{ color: entry.color, textShadow: `0 0 10px ${entry.color}60` }}>{entry.rune}</span>
                   {i < 3 && <div className="w-px flex-1 mt-2" style={{ background: "rgba(0,168,255,0.1)" }} />}
                 </div>
                 <div className="pb-4">
@@ -225,7 +224,7 @@ export default function Home() {
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-600 mb-4">
             <a href="https://github.com/thoraidev/mimirwell" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">GitHub</a>
             <a href="https://synthesis.md" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Synthesis Hackathon</a>
-            <a href="https://developer.litprotocol.com" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Lit Protocol</a>
+            <a href="https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Revocation Contract</a>
             <a href="https://lighthouse.storage" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Lighthouse</a>
           </div>
           <div className="text-xs text-gray-700">
