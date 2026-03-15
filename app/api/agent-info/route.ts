@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getAgentAddress } from "@/lib/lit";
+import { getAgentAddress } from "@/lib/agent-info";
 
 export async function GET() {
   try {

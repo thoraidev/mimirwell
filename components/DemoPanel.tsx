@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId } from "wagmi";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId, useSignMessage } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import MemoryCard, { type MemoryState } from "./MemoryCard";
 
@@ -26,6 +26,53 @@ const REVOCATION_ABI = [
   },
 ] as const;
 
+// ─── Web Crypto helpers ───────────────────────────────────────────────────────
+// These run in the browser — no server involvement, no external dependency.
+// Key is derived from a wallet signature so only the wallet holder can decrypt.
+
+const DERIVATION_MESSAGE =
+  "MimirWell agent key derivation v1 — sign to derive your memory encryption key";
+
+async function deriveKeyFromSignature(hexSignature: string): Promise<CryptoKey> {
+  const sigBytes = new Uint8Array(
+    hexSignature.replace(/^0x/, "").match(/.{2}/g)!.map((b) => parseInt(b, 16))
+  );
+  const keyMaterial = await crypto.subtle.importKey("raw", sigBytes, { name: "HKDF" }, false, [
+    "deriveKey",
+  ]);
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new TextEncoder().encode("mimirwell-v1"),
+      info: new TextEncoder().encode("agent-memory-key"),
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptContent(plaintext: string, key: CryptoKey): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(plaintext);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  // Pack: [12-byte IV][ciphertext] → base64
+  const packed = new Uint8Array(12 + ciphertext.byteLength);
+  packed.set(iv);
+  packed.set(new Uint8Array(ciphertext), 12);
+  return btoa(String.fromCharCode(...packed));
+}
+
+async function decryptContent(encryptedBlob: string, key: CryptoKey): Promise<string> {
+  const packed = Uint8Array.from(atob(encryptedBlob), (c) => c.charCodeAt(0));
+  const iv = packed.slice(0, 12);
+  const data = packed.slice(12);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+  return new TextDecoder().decode(decrypted);
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MemoryEntry {
@@ -42,18 +89,19 @@ export default function DemoPanel() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
+  const { signMessageAsync } = useSignMessage();
 
   // Contract write — revoke
   const { writeContract: writeRevoke, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
-  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({
-    hash: revokeTxHash,
-  });
+  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({ hash: revokeTxHash });
 
   // Contract write — reinstate
   const { writeContract: writeReinstate, data: reinstateTxHash, isPending: reinstateIsPending, error: reinstateError } = useWriteContract();
-  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({
-    hash: reinstateTxHash,
-  });
+  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({ hash: reinstateTxHash });
+
+  // Derived crypto key — persists for the session, never leaves the browser
+  const cryptoKeyRef = useRef<CryptoKey | null>(null);
+  const [keyReady, setKeyReady] = useState(false);
 
   const [agentWallet, setAgentWallet] = useState<string>("");
   const [agentEns, setAgentEns] = useState<string | null>(null);
@@ -93,75 +141,75 @@ export default function DemoPanel() {
     if (address) resolveEns(address, setOwnerEns);
   }, [address, resolveEns]);
 
-  // Track revoke tx lifecycle
+  // Clear derived key when wallet changes
   useEffect(() => {
-    if (revokeIsPending) {
-      setStatus("Confirm the transaction in MetaMask…");
-    }
-  }, [revokeIsPending]);
+    cryptoKeyRef.current = null;
+    setKeyReady(false);
+  }, [address]);
 
+  // Revoke tx lifecycle
+  useEffect(() => { if (revokeIsPending) setStatus("Confirm the transaction in MetaMask…"); }, [revokeIsPending]);
+  useEffect(() => { if (revokeConfirming) setStatus("Transaction submitted — waiting for mainnet confirmation…"); }, [revokeConfirming]);
   useEffect(() => {
-    if (revokeConfirming) {
-      setStatus("Transaction submitted — waiting for mainnet confirmation…");
-    }
-  }, [revokeConfirming]);
-
-  useEffect(() => {
-    if (revokeConfirmed && revokeTxHash) {
+    if (revokeConfirmed && revokeTxHash)
       setStatus(`✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`);
-    }
   }, [revokeConfirmed, revokeTxHash]);
-
   useEffect(() => {
-    if (revokeError) {
-      const msg = revokeError.message?.split("\n")[0] ?? "Transaction failed";
-      setStatus(`✗ ${msg}`);
-    }
+    if (revokeError) setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
   }, [revokeError]);
 
   // Reinstate tx lifecycle
+  useEffect(() => { if (reinstateIsPending) setStatus("Confirm the reinstatement in MetaMask…"); }, [reinstateIsPending]);
+  useEffect(() => { if (reinstateConfirming) setStatus("Transaction submitted — waiting for mainnet confirmation…"); }, [reinstateConfirming]);
   useEffect(() => {
-    if (reinstateIsPending) setStatus("Confirm the reinstatement in MetaMask…");
-  }, [reinstateIsPending]);
-
-  useEffect(() => {
-    if (reinstateConfirming) setStatus("Transaction submitted — waiting for mainnet confirmation…");
-  }, [reinstateConfirming]);
-
-  useEffect(() => {
-    if (reinstateConfirmed && reinstateTxHash) {
+    if (reinstateConfirmed && reinstateTxHash)
       setStatus(`✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`);
-    }
   }, [reinstateConfirmed, reinstateTxHash]);
-
   useEffect(() => {
-    if (reinstateError) {
-      const msg = reinstateError.message?.split("\n")[0] ?? "Transaction failed";
-      setStatus(`✗ ${msg}`);
-    }
+    if (reinstateError) setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
   }, [reinstateError]);
+
+  // ─── Key derivation ───────────────────────────────────────────────────────
+
+  const ensureKey = useCallback(async (): Promise<CryptoKey> => {
+    if (cryptoKeyRef.current) return cryptoKeyRef.current;
+    setStatus("Sign the message in MetaMask to derive your encryption key — no gas, just a signature…");
+    const sig = await signMessageAsync({ message: DERIVATION_MESSAGE });
+    const key = await deriveKeyFromSignature(sig);
+    cryptoKeyRef.current = key;
+    setKeyReady(true);
+    return key;
+  }, [signMessageAsync]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
   const handleRemember = async () => {
     if (!address || !memoryText.trim()) return;
     setLoading("remember");
-    setStatus("Encrypting with Lit Protocol → agent wallet…");
     try {
+      const key = await ensureKey();
+      setStatus("Encrypting in your browser — MimirWell will never see this plaintext…");
+      const encryptedBlob = await encryptContent(memoryText.trim(), key);
+
       const res = await fetch("/api/remember", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: memoryText.trim(), wallet: address }),
+        body: JSON.stringify({
+          encryptedBlob,
+          ownerWallet: address,
+          agentWallet: agentWallet || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
       setMemories((prev) => [
         { cid: data.cid, content: memoryText.trim(), wallet: data.agentWallet ?? address, state: "stored", timestamp: Date.now() },
         ...prev,
       ]);
       setMemoryText("");
       setRecallCid(data.cid);
-      setStatus(`✓ Memory sealed on Filecoin — CID: ${data.cid.slice(0, 14)}…`);
+      setStatus(`✓ Encrypted memory stored on Filecoin — CID: ${data.cid.slice(0, 14)}…`);
     } catch (e) {
       setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -172,7 +220,7 @@ export default function DemoPanel() {
   const handleRecall = async () => {
     if (!recallCid.trim()) return;
     setLoading("recall");
-    setStatus("Agent requesting decryption from Lit Protocol…");
+    setStatus("Fetching from Filecoin — checking revocation on-chain…");
     try {
       const res = await fetch("/api/recall", {
         method: "POST",
@@ -180,21 +228,25 @@ export default function DemoPanel() {
         body: JSON.stringify({ cid: recallCid.trim(), ownerWallet: address }),
       });
       const data = await res.json();
+
       if (data.status === "denied") {
         setMemories((prev) => [
           { cid: recallCid.trim(), wallet: agentWallet || "agent", state: "sealed", timestamp: Date.now() },
           ...prev,
         ]);
-        setStatus("✗ Access denied — memory sealed by owner");
-      } else if (res.ok) {
+        setStatus("✗ Access denied — revocation confirmed on-chain");
+      } else if (res.ok && data.encryptedBlob) {
+        setStatus("Revocation clear — decrypting locally with your wallet key…");
+        const key = await ensureKey();
+        const content = await decryptContent(data.encryptedBlob, key);
         setMemories((prev) => [
-          { cid: recallCid.trim(), content: data.content, wallet: data.agentWallet ?? agentWallet, state: "recalled", timestamp: Date.now() },
+          { cid: recallCid.trim(), content, wallet: data.agentWallet ?? agentWallet, state: "recalled", timestamp: Date.now() },
           ...prev,
         ]);
         setRecallCid("");
-        setStatus("✓ Memory recalled by agent");
+        setStatus("✓ Decrypted locally — MimirWell never saw the plaintext");
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error ?? "Unexpected response");
       }
     } catch (e) {
       setStatus(`✗ Error: ${e instanceof Error ? e.message : String(e)}`);
@@ -205,37 +257,16 @@ export default function DemoPanel() {
 
   const handleRevoke = () => {
     if (!revokeAgent.trim() || !address) return;
-
-    // Must be on mainnet
-    if (chainId !== mainnet.id) {
-      switchChain({ chainId: mainnet.id });
-      return;
-    }
-
+    if (chainId !== mainnet.id) { switchChain({ chainId: mainnet.id }); return; }
     setStatus("Opening MetaMask — confirm the revocation transaction…");
-    writeRevoke({
-      address: REVOCATION_CONTRACT,
-      abi: REVOCATION_ABI,
-      functionName: "revoke",
-      args: [revokeAgent.trim() as `0x${string}`],
-    });
+    writeRevoke({ address: REVOCATION_CONTRACT, abi: REVOCATION_ABI, functionName: "revoke", args: [revokeAgent.trim() as `0x${string}`] });
   };
 
   const handleReinstate = () => {
     if (!revokeAgent.trim() || !address) return;
-
-    if (chainId !== mainnet.id) {
-      switchChain({ chainId: mainnet.id });
-      return;
-    }
-
+    if (chainId !== mainnet.id) { switchChain({ chainId: mainnet.id }); return; }
     setStatus("Opening MetaMask — confirm the reinstatement transaction…");
-    writeReinstate({
-      address: REVOCATION_CONTRACT,
-      abi: REVOCATION_ABI,
-      functionName: "reinstate",
-      args: [revokeAgent.trim() as `0x${string}`],
-    });
+    writeReinstate({ address: REVOCATION_CONTRACT, abi: REVOCATION_ABI, functionName: "reinstate", args: [revokeAgent.trim() as `0x${string}`] });
   };
 
   // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -252,6 +283,7 @@ export default function DemoPanel() {
   const isRevoking = revokeIsPending || revokeConfirming;
   const isReinstating = reinstateIsPending || reinstateConfirming;
   const wrongNetwork = chainId !== mainnet.id;
+  const isBusy = loading !== null || isRevoking || isReinstating;
 
   const inputClass = `
     w-full px-4 py-3 rounded-lg
@@ -277,7 +309,7 @@ export default function DemoPanel() {
           <div className="flex items-start gap-2">
             <span className="text-base mt-0.5 shrink-0">ᛏ</span>
             <div className="flex-1 min-w-0">
-              <span className="text-[#00a8ff]/60">Agent · decryption identity</span>
+              <span className="text-[#00a8ff]/60">Agent · revocation target</span>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[#00a8ff] break-all">{agentEns ?? agentWallet}</span>
                 {agentEns && <span className="text-[#00a8ff]/40 ml-1 break-all">{agentWallet}</span>}
@@ -289,7 +321,7 @@ export default function DemoPanel() {
             <div className="flex items-start gap-2">
               <span className="text-base mt-0.5 shrink-0">ᚨ</span>
               <div className="flex-1 min-w-0">
-                <span className="text-[#14b8a6]/60">Owner · revocation authority</span>
+                <span className="text-[#14b8a6]/60">Owner · key & revocation authority</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[#14b8a6] break-all">{ownerEns ?? address}</span>
                   {ownerEns && <span className="text-[#14b8a6]/40 ml-1 break-all">{address}</span>}
@@ -298,6 +330,16 @@ export default function DemoPanel() {
               </div>
             </div>
           )}
+          {/* Zero-knowledge indicator */}
+          <div className="flex items-center gap-2 pt-1 border-t border-[#00a8ff]/10">
+            <span className="text-base shrink-0">🔑</span>
+            <span className="text-[#00a8ff]/40 text-xs">
+              {keyReady
+                ? "Encryption key derived from wallet signature — ready"
+                : "Encryption key derived from wallet signature on first use"}
+            </span>
+            {keyReady && <span className="ml-auto text-[#14b8a6]/60">✓ key ready</span>}
+          </div>
         </div>
       )}
 
@@ -319,7 +361,7 @@ export default function DemoPanel() {
       {/* Wrong network warning */}
       {wrongNetwork && (
         <div className="px-4 py-2.5 rounded-lg text-sm bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-between">
-          <span>⚠ Switch to Ethereum Mainnet to revoke</span>
+          <span>⚠ Switch to Ethereum Mainnet for revoke/reinstate</span>
           <button onClick={() => switchChain({ chainId: mainnet.id })} className="ml-4 underline cursor-pointer hover:text-amber-300">Switch</button>
         </div>
       )}
@@ -328,8 +370,8 @@ export default function DemoPanel() {
       <div className="rounded-xl border border-[#00a8ff]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-[#00a8ff] font-bold text-sm tracking-widest mb-4">ᚠ REMEMBER</h3>
         <p className="text-xs text-gray-500 mb-3">
-          Content is encrypted to the agent&apos;s wallet via Lit Protocol, then stored on Filecoin.
-          Owner wallet ({ownerEns ?? address?.slice(0, 8) ?? "…"}) is baked in as the revocation authority.
+          Content is encrypted in your browser before upload — MimirWell never sees the plaintext.
+          Your wallet signature derives the AES-256 key. Owner ({ownerEns ?? address?.slice(0, 8) ?? "…"}) is the revocation authority.
         </p>
         <textarea
           value={memoryText}
@@ -340,13 +382,13 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRemember}
-          disabled={!memoryText.trim() || loading !== null || isRevoking}
+          disabled={!memoryText.trim() || isBusy}
           className={btnClass(
             "border-[#00a8ff]/40 text-[#00a8ff] bg-[#00a8ff]/10 hover:bg-[#00a8ff]/20 hover:shadow-[0_0_20px_rgba(0,168,255,0.2)]",
-            !memoryText.trim() || loading !== null || isRevoking
+            !memoryText.trim() || isBusy
           )}
         >
-          {loading === "remember" ? "Encrypting & Storing…" : "Store Memory →"}
+          {loading === "remember" ? "Encrypting & Storing…" : "Encrypt & Store →"}
         </button>
       </div>
 
@@ -354,7 +396,8 @@ export default function DemoPanel() {
       <div className="rounded-xl border border-[#14b8a6]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-[#14b8a6] font-bold text-sm tracking-widest mb-4">ᛖ RECALL</h3>
         <p className="text-xs text-gray-500 mb-3">
-          The agent decrypts autonomously using its server key — no wallet signature required.
+          Revocation is checked on-chain. The encrypted blob is returned and decrypted locally
+          with your wallet key — zero-knowledge end to end.
         </p>
         <input
           value={recallCid}
@@ -364,17 +407,17 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRecall}
-          disabled={!recallCid.trim() || loading !== null || isRevoking}
+          disabled={!recallCid.trim() || isBusy}
           className={btnClass(
             "border-[#14b8a6]/40 text-[#14b8a6] bg-[#14b8a6]/10 hover:bg-[#14b8a6]/20 hover:shadow-[0_0_20px_rgba(20,184,166,0.2)]",
-            !recallCid.trim() || loading !== null || isRevoking
+            !recallCid.trim() || isBusy
           )}
         >
-          {loading === "recall" ? "Decrypting…" : "Recall Memory →"}
+          {loading === "recall" ? "Fetching & Decrypting…" : "Recall & Decrypt →"}
         </button>
       </div>
 
-      {/* Revoke — browser wallet signing */}
+      {/* Revoke */}
       <div className="rounded-xl border border-red-500/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="text-red-400 font-bold text-sm tracking-widest mb-1">ᛉ REVOKE ACCESS</h3>
         <p className="text-xs text-gray-500 mb-4">
@@ -389,33 +432,25 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleRevoke}
-          disabled={!revokeAgent.trim() || isRevoking || isReinstating || loading !== null}
+          disabled={!revokeAgent.trim() || isBusy}
           className={btnClass(
             wrongNetwork
               ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
               : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
-            !revokeAgent.trim() || isRevoking || isReinstating || loading !== null
+            !revokeAgent.trim() || isBusy
           )}
         >
-          {wrongNetwork
-            ? "Switch to Mainnet →"
-            : isRevoking
-              ? revokeIsPending ? "Waiting for MetaMask…" : "Confirming on-chain…"
-              : "Revoke Access → MetaMask"}
+          {wrongNetwork ? "Switch to Mainnet →" : isRevoking ? (revokeIsPending ? "Waiting for MetaMask…" : "Confirming on-chain…") : "Revoke Access → MetaMask"}
         </button>
         {revokeTxHash && (
-          <a
-            href={`https://etherscan.io/tx/${revokeTxHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate"
-          >
+          <a href={`https://etherscan.io/tx/${revokeTxHash}`} target="_blank" rel="noopener noreferrer"
+            className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate">
             ↗ etherscan.io/tx/{revokeTxHash.slice(0, 20)}…
           </a>
         )}
       </div>
 
-      {/* Reinstate — browser wallet signing */}
+      {/* Reinstate */}
       <div className="rounded-xl border border-[#a78bfa]/20 bg-[#0a0f1a]/60 backdrop-blur-sm p-5">
         <h3 className="font-bold text-sm tracking-widest mb-1" style={{ color: "#a78bfa" }}>ᚱ REINSTATE ACCESS</h3>
         <p className="text-xs text-gray-500 mb-4">
@@ -430,28 +465,20 @@ export default function DemoPanel() {
         />
         <button
           onClick={handleReinstate}
-          disabled={!revokeAgent.trim() || isRevoking || isReinstating || loading !== null}
+          disabled={!revokeAgent.trim() || isBusy}
           className={btnClass(
             wrongNetwork
               ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
               : "border-[#a78bfa]/40 bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 hover:shadow-[0_0_20px_rgba(167,139,250,0.2)]",
-            !revokeAgent.trim() || isRevoking || isReinstating || loading !== null
+            !revokeAgent.trim() || isBusy
           )}
-          style={!wrongNetwork && !(!revokeAgent.trim() || isRevoking || isReinstating || loading !== null) ? { color: "#a78bfa" } : {}}
+          style={!wrongNetwork && !(!revokeAgent.trim() || isBusy) ? { color: "#a78bfa" } : {}}
         >
-          {wrongNetwork
-            ? "Switch to Mainnet →"
-            : isReinstating
-              ? reinstateIsPending ? "Waiting for MetaMask…" : "Confirming on-chain…"
-              : "Reinstate Access → MetaMask"}
+          {wrongNetwork ? "Switch to Mainnet →" : isReinstating ? (reinstateIsPending ? "Waiting for MetaMask…" : "Confirming on-chain…") : "Reinstate Access → MetaMask"}
         </button>
         {reinstateTxHash && (
-          <a
-            href={`https://etherscan.io/tx/${reinstateTxHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate"
-          >
+          <a href={`https://etherscan.io/tx/${reinstateTxHash}`} target="_blank" rel="noopener noreferrer"
+            className="block mt-3 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors truncate">
             ↗ etherscan.io/tx/{reinstateTxHash.slice(0, 20)}…
           </a>
         )}

@@ -1,77 +1,87 @@
 /**
  * POST /api/remember
- * Encrypts content with Lit Protocol (to the agent's wallet) and stores on Filecoin.
+ * Stores a pre-encrypted memory blob on Filecoin.
  *
- * Body: { content: string, wallet: string, agentWallet?: string }
- *   wallet      = human owner's address or ENS name (e.g. "thorai.eth")
- *   agentWallet = optional; external agents pass their own wallet/ENS here
+ * MimirWell is zero-knowledge — this server never sees plaintext.
+ * Agents encrypt locally before calling this endpoint.
  *
- * Returns: { cid: string, agentWallet: string, manifestCid: string, status: "stored" }
+ * Body: {
+ *   encryptedBlob: string   // base64 AES-256-GCM blob from agent-crypto.ts
+ *   ownerWallet:   string   // hex address or ENS name (revocation authority)
+ *   agentWallet?:  string   // hex address or ENS name (defaults to ThorAI's wallet)
+ * }
+ *
+ * Returns: { cid, agentWallet, manifestCid, status: "stored" }
+ *
+ * ─── Agent reference implementation ─────────────────────────────────────────
+ * See lib/agent-crypto.ts for the copy-paste encryption functions.
+ *
+ * curl -X POST https://mimirwell.net/api/remember \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"encryptedBlob":"<base64>","ownerWallet":"trav.eth","agentWallet":"<your-wallet>"}'
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { encryptMemory, getAgentAddress } from "@/lib/lit";
 import { uploadToFilecoin } from "@/lib/lighthouse";
 import { registerCID, uploadManifest } from "@/lib/cid-registry";
 import { resolveAddress } from "@/lib/ens";
 import { logRemember } from "@/lib/activity-log";
+import { getAgentAddress } from "@/lib/agent-info";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { content, wallet, agentWallet: customAgentWallet } = body as {
-      content: string;
-      wallet: string;
+    const {
+      encryptedBlob,
+      ownerWallet: rawOwner,
+      agentWallet: rawAgent,
+    } = body as {
+      encryptedBlob: string;
+      ownerWallet: string;
       agentWallet?: string;
     };
 
-    if (!content || typeof content !== "string") {
-      return NextResponse.json({ error: "content is required" }, { status: 400 });
+    if (!encryptedBlob || typeof encryptedBlob !== "string") {
+      return NextResponse.json({ error: "encryptedBlob is required" }, { status: 400 });
     }
-    if (!wallet || typeof wallet !== "string") {
-      return NextResponse.json({ error: "wallet address or ENS name is required" }, { status: 400 });
+    if (!rawOwner || typeof rawOwner !== "string") {
+      return NextResponse.json({ error: "ownerWallet is required" }, { status: 400 });
     }
 
     // Resolve ENS names → hex addresses
-    const ownerAddress = await resolveAddress(wallet);
-    const agentAddress = customAgentWallet
-      ? await resolveAddress(customAgentWallet)
-      : getAgentAddress();
+    const ownerAddress = await resolveAddress(rawOwner);
+    const agentAddress = rawAgent ? await resolveAddress(rawAgent) : getAgentAddress();
 
-    // 1. Encrypt with Lit Protocol — ACC: agent owns wallet AND not revoked on-chain
-    const encrypted = await encryptMemory(content, agentAddress, ownerAddress);
-
-    // 2. Build storage blob
+    // Build storage blob — zero-knowledge: only encrypted content stored
     const blob = {
-      ciphertext: encrypted.ciphertext,
-      dataToEncryptHash: encrypted.dataToEncryptHash,
-      accessControlConditions: encrypted.accessControlConditions,
+      encryptedBlob,
       agentWallet: agentAddress.toLowerCase(),
       ownerWallet: ownerAddress.toLowerCase(),
       timestamp: Date.now(),
+      version: "zk-v1",
     };
 
-    // 3. Upload to Filecoin via Lighthouse
+    // Upload to Filecoin via Lighthouse
     const { cid, url } = await uploadToFilecoin(blob);
 
-    // 4. Register in local CID index
+    // Register in local CID index
     registerCID({
       cid,
       agentWallet: agentAddress,
       ownerWallet: ownerAddress,
       timestamp: Date.now(),
-      preview: content.slice(0, 80),
+      preview: "[encrypted]",
     });
 
-    // 5. Log to activity feed
+    // Log to activity feed (first 48 chars of encryptedBlob for terminal display)
     logRemember({
       agentWallet: agentAddress,
       ownerWallet: ownerAddress,
       cid,
-      ciphertext: encrypted.ciphertext,
+      ciphertext: encryptedBlob,
     });
 
-    // 6. Upload updated manifest to Filecoin (async, non-blocking)
+    // Upload updated manifest to Filecoin (async, non-blocking)
     let manifestCid: string | null = null;
     try {
       manifestCid = await uploadManifest();
@@ -84,10 +94,6 @@ export async function POST(req: NextRequest) {
       url,
       agentWallet: agentAddress,
       manifestCid,
-      encryptedData: {
-        ciphertext: encrypted.ciphertext,
-        dataToEncryptHash: encrypted.dataToEncryptHash,
-      },
       status: "stored",
     });
   } catch (err) {

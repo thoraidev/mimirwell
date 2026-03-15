@@ -14,17 +14,26 @@ export interface UploadResult {
 }
 
 export interface StoredBlob {
-  ciphertext: string;
-  dataToEncryptHash: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  accessControlConditions: any;
-  /** Legacy: owner wallet (pre-agent-key model) */
-  wallet?: string;
-  /** Human principal who stored this memory */
+  /** ZK format (v1): base64 AES-256-GCM encrypted content */
+  encryptedBlob?: string;
+  /** Schema version — "zk-v1" for zero-knowledge format */
+  version?: string;
+  /** Human principal who stored this memory (revocation authority) */
   ownerWallet?: string;
-  /** Agent wallet the memory is encrypted to */
+  /** Agent wallet associated with this memory (revocation target) */
   agentWallet?: string;
   timestamp: number;
+
+  // ─── Legacy Lit fields (kept for type-safety on old fetched blobs) ─────────
+  /** @deprecated Lit Protocol ciphertext — unrecoverable after network migration */
+  ciphertext?: string;
+  /** @deprecated Lit dataToEncryptHash */
+  dataToEncryptHash?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /** @deprecated Lit access control conditions */
+  accessControlConditions?: any;
+  /** @deprecated Legacy owner wallet field */
+  wallet?: string;
 }
 
 // ─── Upload encrypted blob ────────────────────────────────────────────────────

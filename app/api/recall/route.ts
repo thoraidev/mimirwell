@@ -1,37 +1,46 @@
 /**
  * POST /api/recall
- * Fetches encrypted blob from Filecoin and decrypts via Lit Protocol using the agent's key.
+ * Fetches an encrypted memory blob from Filecoin and returns it to the caller.
  *
- * Body: { cid: string, ownerWallet?: string }
- * Returns: { content: string, status: "decrypted" }
- *       OR { status: "denied", reason: "..." }
+ * MimirWell is zero-knowledge — this server never decrypts.
+ * Revocation is enforced before returning the blob: a revoked agent
+ * never receives the ciphertext, so it cannot decrypt even with its own key.
  *
- * Revocation check: in-memory cache first (fast), then on-chain contract (fallback).
- * This means browser-wallet or Etherscan revokes are honoured automatically.
+ * Body: { cid: string, ownerWallet?: string, agentWallet?: string }
+ *
+ * Returns:
+ *   { encryptedBlob: string, agentWallet: string, ownerWallet: string, status: "stored" }
+ *   OR { status: "denied", reason: "..." }  (403)
+ *
+ * ─── Revocation model ────────────────────────────────────────────────────────
+ * Revocation controls the managed access path — a revoked agent cannot
+ * retrieve the blob through MimirWell. An agent that saved CIDs locally
+ * and holds its own key can still decrypt previously-fetched blobs; this is
+ * inherent to any agent-sovereign encryption scheme. Full cryptographic
+ * revocation (where even saved CIDs become unrecoverable) requires threshold
+ * key management — Lit Protocol mainnet is the production upgrade path.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import { decryptWithAgentKey, getAgentAddress, type EncryptedMemory } from "@/lib/lit";
 import { fetchFromFilecoin } from "@/lib/lighthouse";
 import { isRevokedCached, REVOCATION_CONTRACT, REVOCATION_ABI } from "@/lib/revoke-core";
 import { tryResolveAddress } from "@/lib/ens";
 import { logRecall } from "@/lib/activity-log";
+import { getAgentAddress } from "@/lib/agent-info";
 
 const publicClient = createPublicClient({
   chain: mainnet,
   transport: http("https://ethereum-rpc.publicnode.com"),
 });
 
-// Check revocation: on-chain is authoritative, cache is RPC fallback only.
-// Always querying the contract ensures reinstates (MetaMask or server) take effect immediately.
+// On-chain is authoritative — always check contract, use cache only as RPC fallback.
+// This ensures reinstates (MetaMask or server) take effect immediately.
 async function checkRevoked(ownerWallet: string, agentWallet: string): Promise<boolean> {
   const owner = ownerWallet.toLowerCase();
   const agent = agentWallet.toLowerCase();
 
-  // Always check on-chain — the contract is the source of truth.
-  // This honours both revokes AND reinstates done via any path (MetaMask, Etherscan, curl).
   try {
     const revoked = await publicClient.readContract({
       address: REVOCATION_CONTRACT,
@@ -41,21 +50,22 @@ async function checkRevoked(ownerWallet: string, agentWallet: string): Promise<b
     });
     return !!revoked;
   } catch (err) {
-    // RPC unreachable — fall back to in-memory cache (conservative: deny if cache says revoked)
+    // RPC unreachable — fall back to in-memory cache
     console.warn("[/api/recall] On-chain revocation check failed, falling back to cache:", err);
     return isRevokedCached(owner, agent);
   }
 }
 
 export async function POST(req: NextRequest) {
-  const agentAddress = getAgentAddress();
+  const defaultAgent = getAgentAddress();
   let cid = "";
 
   try {
     const body = await req.json();
-    const { cid: rawCid, ownerWallet: rawOwner } = body as {
+    const { cid: rawCid, ownerWallet: rawOwner, agentWallet: rawAgent } = body as {
       cid: string;
       ownerWallet?: string;
+      agentWallet?: string;
     };
     cid = rawCid;
 
@@ -63,17 +73,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "cid is required" }, { status: 400 });
     }
 
-    // 1. Fetch encrypted blob from Filecoin
+    // 1. Fetch blob from Filecoin
     const blob = await fetchFromFilecoin(cid);
 
-    // 2. Resolve owner wallet — prefer value stored in blob (source of truth)
-    //    Falls back to caller-supplied value, then blob.wallet field
-    const rawOwnerFromBlob = blob.ownerWallet ?? blob.wallet ?? rawOwner;
-    const ownerAddress = rawOwnerFromBlob
-      ? await tryResolveAddress(rawOwnerFromBlob)
-      : null;
+    // 2. Resolve owner wallet — blob metadata is source of truth, caller-supplied is fallback
+    const rawOwnerSource = blob.ownerWallet ?? blob.wallet ?? rawOwner;
+    const ownerAddress = rawOwnerSource ? await tryResolveAddress(rawOwnerSource) : null;
 
-    // 3. Check revocation — cache + on-chain fallback
+    // 3. Resolve agent wallet — blob metadata, then caller-supplied, then default
+    const rawAgentSource = blob.agentWallet ?? rawAgent ?? defaultAgent;
+    const agentAddress = (await tryResolveAddress(rawAgentSource)) ?? defaultAgent;
+
+    // 4. Check revocation — deny before returning any ciphertext
     if (ownerAddress) {
       const revoked = await checkRevoked(ownerAddress.toLowerCase(), agentAddress.toLowerCase());
       if (revoked) {
@@ -85,39 +96,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Build EncryptedMemory object
-    const encrypted: EncryptedMemory = {
-      ciphertext: blob.ciphertext,
-      dataToEncryptHash: blob.dataToEncryptHash,
-      accessControlConditions: blob.accessControlConditions,
-      chain: "ethereum",
-    };
-
-    // 5. Decrypt server-side using the agent's private key
-    try {
-      const content = await decryptWithAgentKey(encrypted);
-      logRecall({ agentWallet: agentAddress, cid, success: true });
-      return NextResponse.json({ content, agentWallet: agentAddress, status: "decrypted" });
-    } catch (litErr) {
-      const msg = litErr instanceof Error ? litErr.message : String(litErr);
-      const isAccessDenied =
-        msg.toLowerCase().includes("not authorized") ||
-        msg.toLowerCase().includes("access denied") ||
-        msg.toLowerCase().includes("revoked") ||
-        msg.toLowerCase().includes("unauthorized");
-
-      if (isAccessDenied) {
-        logRecall({ agentWallet: agentAddress, cid, success: false, denied: true });
-        return NextResponse.json(
-          { status: "denied", reason: "Access revoked or unauthorized" },
-          { status: 403 }
-        );
-      }
-      throw litErr;
+    // 5. Check this is a ZK-format blob
+    if (!blob.encryptedBlob) {
+      // Legacy Lit-format blob — cannot decrypt, return helpful error
+      logRecall({ agentWallet: agentAddress, cid, success: false });
+      return NextResponse.json(
+        { error: "Legacy Lit-format blob — unrecoverable after network migration. Store a new memory.", status: "legacy" },
+        { status: 410 }
+      );
     }
+
+    // 6. Return the encrypted blob — agent decrypts locally with its own key
+    logRecall({ agentWallet: agentAddress, cid, success: true });
+
+    return NextResponse.json({
+      encryptedBlob: blob.encryptedBlob,
+      agentWallet: agentAddress,
+      ownerWallet: ownerAddress ?? blob.ownerWallet,
+      status: "stored",
+    });
   } catch (err) {
     console.error("[/api/recall] Error:", err);
-    logRecall({ agentWallet: agentAddress, cid, success: false });
+    logRecall({ agentWallet: defaultAgent, cid, success: false });
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message, status: "failed" }, { status: 500 });
   }
