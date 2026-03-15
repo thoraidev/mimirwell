@@ -4,8 +4,8 @@ import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "MimirWell — Encrypted Sovereign Memory",
-  description: "Your agent's memories live on Filecoin. The keys live on Lit Protocol. You hold the lock.",
-  keywords: ["AI agents", "Filecoin", "Lit Protocol", "encrypted memory", "sovereign data", "Web3"],
+  description: "Your agent encrypts locally. We store what we can't read. You hold the kill switch. Zero-knowledge agent memory on Filecoin + Ethereum.",
+  keywords: ["AI agents", "Filecoin", "encrypted memory", "zero-knowledge", "sovereign data", "Web3", "Ethereum", "AES-256-GCM"],
   openGraph: {
     title: "MimirWell",
     description: "Encrypted sovereign memory for AI agents.",
