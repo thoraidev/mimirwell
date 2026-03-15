@@ -107,6 +107,7 @@ export function logRemember(opts: {
 
 export function logRecall(opts: {
   agentWallet: string;
+  ownerWallet?: string;
   cid: string;
   success: boolean;
   denied?: boolean;
@@ -118,6 +119,10 @@ export function logRecall(opts: {
     type: opts.denied ? 'RECALL_DENIED' : 'RECALL',
     agentWallet: truncateWallet(opts.agentWallet),
     agentWalletFull: opts.agentWallet,
+    ...(opts.ownerWallet ? {
+      ownerWallet: truncateWallet(opts.ownerWallet),
+      ownerWalletFull: opts.ownerWallet,
+    } : {}),
     cid: truncateCid(opts.cid),
     cidFull: opts.cid,
     success: opts.success,

@@ -76,6 +76,14 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
 
     case "RECALL":
       lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}`, color });
+      if (event.ownerWallet) {
+        const sameWallet =
+          event.agentWalletFull && event.ownerWalletFull &&
+          event.agentWalletFull.toLowerCase() === event.ownerWalletFull.toLowerCase();
+        if (!sameWallet) {
+          lines.push({ text: `           OWNER    ${displayWallet(event.ownerWallet, event.ownerWalletName)}`, color: "#6b7280" });
+        }
+      }
       if (event.cid)    lines.push({
         text: `           CID      ${event.cid}${event.cidFull ? " ↗" : ""}`,
         color: "#374151",
@@ -88,10 +96,15 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
       }
       break;
 
-    case "RECALL_DENIED":
+    case "RECALL_DENIED": {
+      const deniedOwner = event.ownerWallet
+        ? displayWallet(event.ownerWallet, event.ownerWalletName)
+        : "owner";
       lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}  ← DENIED`, color });
-      lines.push({ text: `           LIT      isRevoked() = true  [access sealed]`, color: "#ef4444" });
+      lines.push({ text: `           OWNER    ${deniedOwner}  sealed this agent`, color: "#6b7280" });
+      lines.push({ text: `           CHAIN    isRevoked() = true  [access sealed]`, color: "#ef4444" });
       break;
+    }
 
     case "REVOKE":
       lines.push({

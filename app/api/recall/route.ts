@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     if (ownerAddress) {
       const revoked = await checkRevoked(ownerAddress.toLowerCase(), agentAddress.toLowerCase());
       if (revoked) {
-        logRecall({ agentWallet: agentAddress, cid, success: false, denied: true });
+        logRecall({ agentWallet: agentAddress, ownerWallet: ownerAddress ?? undefined, cid, success: false, denied: true });
         return NextResponse.json(
           { status: "denied", reason: "Access revoked by owner" },
           { status: 403 }
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     // 5. Check this is a ZK-format blob
     if (!blob.encryptedBlob) {
       // Legacy Lit-format blob — cannot decrypt, return helpful error
-      logRecall({ agentWallet: agentAddress, cid, success: false });
+      logRecall({ agentWallet: agentAddress, ownerWallet: ownerAddress ?? undefined, cid, success: false });
       return NextResponse.json(
         { error: "Legacy Lit-format blob — unrecoverable after network migration. Store a new memory.", status: "legacy" },
         { status: 410 }
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Return the encrypted blob — agent decrypts locally with its own key
-    logRecall({ agentWallet: agentAddress, cid, success: true });
+    logRecall({ agentWallet: agentAddress, ownerWallet: ownerAddress ?? undefined, cid, success: true });
 
     return NextResponse.json({
       encryptedBlob: blob.encryptedBlob,
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("[/api/recall] Error:", err);
-    logRecall({ agentWallet: defaultAgent, cid, success: false });
+    logRecall({ agentWallet: defaultAgent, cid, success: false }); // no owner — error path, blob may not have been fetched
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message, status: "failed" }, { status: 500 });
   }
