@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   useAccount,
   useWriteContract,
+  useReadContract,
   useSwitchChain,
   useChainId,
   useEnsAddress,
@@ -30,6 +31,16 @@ const REVOCATION_ABI = [
     inputs: [{ name: "agent", type: "address" }],
     outputs: [],
     stateMutability: "nonpayable",
+  },
+  {
+    name: "isRevoked",
+    type: "function",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "agent", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
   },
 ] as const;
 
@@ -100,6 +111,23 @@ export default function OwnerControls() {
     ? trimmedInput                                        // direct hex address
     : null;
 
+  // ── On-chain revocation status — free eth_call, no gas ───────────────────
+  // agentAddress is now available — safe to use in hook args
+  const {
+    data: onChainRevoked,
+    isLoading: onChainLoading,
+    refetch: refetchRevoked,
+  } = useReadContract({
+    address: REVOCATION_CONTRACT,
+    abi: REVOCATION_ABI,
+    functionName: "isRevoked",
+    args: address && agentAddress
+      ? [address as `0x${string}`, agentAddress as `0x${string}`]
+      : undefined,
+    chainId: mainnet.id,
+    query: { enabled: !!address && !!agentAddress && !wrongNetwork },
+  });
+
   const isValidAddress = !!agentAddress;
 
   // ── ENS reverse lookup for connected wallet (owner display) ───────────────
@@ -122,9 +150,11 @@ export default function OwnerControls() {
   }, [revokeConfirming]);
 
   useEffect(() => {
-    if (revokeConfirmed && revokeTxHash)
+    if (revokeConfirmed && revokeTxHash) {
       setStatus(`✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`);
-  }, [revokeConfirmed, revokeTxHash]);
+      refetchRevoked();
+    }
+  }, [revokeConfirmed, revokeTxHash]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (revokeError) setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
@@ -144,9 +174,11 @@ export default function OwnerControls() {
   }, [reinstateConfirming]);
 
   useEffect(() => {
-    if (reinstateConfirmed && reinstateTxHash)
+    if (reinstateConfirmed && reinstateTxHash) {
       setStatus(`✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`);
-  }, [reinstateConfirmed, reinstateTxHash]);
+      refetchRevoked();
+    }
+  }, [reinstateConfirmed, reinstateTxHash]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (reinstateError) setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
@@ -323,6 +355,33 @@ export default function OwnerControls() {
                 autoComplete="off"
               />
               {renderInputHint()}
+
+              {/* On-chain status badge — visible once a valid address is entered */}
+              {isValidAddress && !wrongNetwork && (
+                <div className="mt-2 flex items-center gap-2">
+                  {onChainLoading ? (
+                    <span className="text-xs text-gray-600 font-mono animate-pulse">
+                      Checking on-chain status…
+                    </span>
+                  ) : onChainRevoked === true ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-full border"
+                      style={{ borderColor: "rgba(245,158,11,0.4)", color: "#f59e0b", background: "rgba(245,158,11,0.08)" }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#f59e0b" }} />
+                      On-chain: REVOKED
+                    </span>
+                  ) : onChainRevoked === false ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-full border"
+                      style={{ borderColor: "rgba(20,184,166,0.3)", color: "#14b8a6", background: "rgba(20,184,166,0.05)" }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#14b8a6" }} />
+                      On-chain: NOT revoked
+                    </span>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             {/* Revoke / Reinstate */}
@@ -386,18 +445,25 @@ export default function OwnerControls() {
               </div>
             )}
 
-            {/* Gas note */}
-            <p className="text-xs text-gray-600 text-center">
-              ~$0.05 gas · Ethereum mainnet · Revocation on-chain ·{" "}
-              <a
-                href="https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-gray-400 transition-colors"
-              >
-                contract ↗
-              </a>
-            </p>
+            {/* Gas note + disclaimer */}
+            <div className="space-y-2 text-center">
+              <p className="text-xs text-gray-600">
+                ~$0.05 gas · Ethereum mainnet ·{" "}
+                <a
+                  href="https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-gray-400 transition-colors"
+                >
+                  contract ↗
+                </a>
+              </p>
+              <p className="text-xs text-gray-700 max-w-sm mx-auto leading-relaxed">
+                MimirWell cannot verify the owner-agent pairing on-chain — that relationship
+                is encoded in the memory blob on Filecoin. Ensure this is the correct agent
+                address before signing.
+              </p>
+            </div>
 
           </div>
         )}
