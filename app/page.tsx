@@ -234,10 +234,7 @@ export default function Home() {
             href="https://github.com/thoraidev/mimirwell"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-mono transition-colors"
-            style={{ color: "#4b5563" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#00a8ff")}
-            onMouseLeave={e => (e.currentTarget.style.color = "#4b5563")}
+            className="inline-flex items-center gap-2 text-xs font-mono text-gray-600 hover:text-[#00a8ff] transition-colors"
           >
             <span>→ Full build log with architecture decisions</span>
             <span style={{ opacity: 0.4 }}>↗</span>
