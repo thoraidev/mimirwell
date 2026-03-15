@@ -94,11 +94,11 @@ export default function DemoPanel() {
 
   // Contract write — revoke
   const { writeContract: writeRevoke, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
-  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({ hash: revokeTxHash, pollingInterval: 4000 });
+  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({ hash: revokeTxHash, pollingInterval: 4000, timeout: 0 });
 
   // Contract write — reinstate
   const { writeContract: writeReinstate, data: reinstateTxHash, isPending: reinstateIsPending, error: reinstateError } = useWriteContract();
-  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({ hash: reinstateTxHash, pollingInterval: 4000 });
+  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({ hash: reinstateTxHash, pollingInterval: 4000, timeout: 0 });
 
   // Derived crypto key — persists for the session, never leaves the browser
   const cryptoKeyRef = useRef<CryptoKey | null>(null);
@@ -139,8 +139,11 @@ export default function DemoPanel() {
   useEffect(() => { if (revokeIsPending) setStatus("Confirm the transaction in MetaMask…"); }, [revokeIsPending]);
   useEffect(() => { if (revokeConfirming) setStatus("Transaction submitted — waiting for mainnet confirmation…"); }, [revokeConfirming]);
   useEffect(() => {
-    if (revokeConfirmed && revokeTxHash)
+    if (revokeConfirmed && revokeTxHash) {
       setStatus(`✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`);
+      // Seal all memory cards — agent access is now blocked
+      setMemories(prev => prev.map(m => ({ ...m, state: "sealed" as MemoryState })));
+    }
   }, [revokeConfirmed, revokeTxHash]);
   useEffect(() => {
     if (revokeError) setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
@@ -150,8 +153,11 @@ export default function DemoPanel() {
   useEffect(() => { if (reinstateIsPending) setStatus("Confirm the reinstatement in MetaMask…"); }, [reinstateIsPending]);
   useEffect(() => { if (reinstateConfirming) setStatus("Transaction submitted — waiting for mainnet confirmation…"); }, [reinstateConfirming]);
   useEffect(() => {
-    if (reinstateConfirmed && reinstateTxHash)
+    if (reinstateConfirmed && reinstateTxHash) {
       setStatus(`✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`);
+      // Unseal memory cards — agent access restored
+      setMemories(prev => prev.map(m => ({ ...m, state: "recalled" as MemoryState })));
+    }
   }, [reinstateConfirmed, reinstateTxHash]);
   useEffect(() => {
     if (reinstateError) setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
