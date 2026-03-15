@@ -59,7 +59,11 @@ function renderLines(event: ActivityEvent): { text: string; color?: string }[] {
     case "RECALL":
       lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}`, color });
       if (event.cid)    lines.push({ text: `           CID      ${event.cid}`, color: "#374151" });
-      lines.push({ text: `           DECRYPT  ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
+      if (event.success) {
+        lines.push({ text: `           DECRYPT  ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
+      } else {
+        lines.push({ text: `           DECRYPT  ✗  [failed — see server logs]`, color: "#ef4444" });
+      }
       break;
 
     case "RECALL_DENIED":
