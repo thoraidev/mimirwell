@@ -26,7 +26,8 @@ export interface ActivityEvent {
   agentWalletFull?: string; // full hex address for ENS reverse lookup
   ownerWallet?: string;   // truncated: "0x8884…0412"
   ownerWalletFull?: string; // full hex address for ENS reverse lookup
-  cid?: string;           // "bafkrei…pma"
+  cid?: string;           // "bafkrei…pma" (truncated for display)
+  cidFull?: string;       // full CID for gateway links
   cipher?: string;        // first 48 chars of ciphertext
   txHash?: string;        // revoke/reinstate on-chain tx
   success: boolean;
@@ -95,6 +96,7 @@ export function logRemember(opts: {
     ownerWallet: truncateWallet(opts.ownerWallet),
     ownerWalletFull: opts.ownerWallet,
     cid: truncateCid(opts.cid),
+    cidFull: opts.cid,
     cipher: opts.ciphertext.slice(0, 48),
     success: true,
   };
@@ -117,6 +119,7 @@ export function logRecall(opts: {
     agentWallet: truncateWallet(opts.agentWallet),
     agentWalletFull: opts.agentWallet,
     cid: truncateCid(opts.cid),
+    cidFull: opts.cid,
     success: opts.success,
   };
   _events.push(event);

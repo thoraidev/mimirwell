@@ -11,6 +11,7 @@ interface ActivityEvent {
   agentWalletName?: string | null;
   ownerWalletName?: string | null;
   cid?: string;
+  cidFull?: string;
   cipher?: string;
   txHash?: string;
   success: boolean;
@@ -39,7 +40,7 @@ function displayWallet(address: string, ensName?: string | null): string {
   return address;
 }
 
-function renderLines(event: ActivityEvent): { text: string; color?: string }[] {
+function renderLines(event: ActivityEvent): { text: string; color?: string; href?: string }[] {
   const rune = RUNE[event.type] ?? "ᛟ";
   const color = COLOR[event.type] ?? "#9ca3af";
   const lines: { text: string; color?: string }[] = [];
@@ -53,12 +54,20 @@ function renderLines(event: ActivityEvent): { text: string; color?: string }[] {
     case "REMEMBER":
       lines.push({ text: `[${event.ts}] ${rune} REMEMBER  ${agent} → Filecoin ✓`, color });
       if (event.cipher) lines.push({ text: `           CIPHER   ${event.cipher}…`, color: "#4b5563" });
-      if (event.cid)    lines.push({ text: `           CID      ${event.cid}`, color: "#374151" });
+      if (event.cid)    lines.push({
+        text: `           CID      ${event.cid}${event.cidFull ? " ↗" : ""}`,
+        color: "#374151",
+        href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
+      });
       break;
 
     case "RECALL":
       lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}`, color });
-      if (event.cid)    lines.push({ text: `           CID      ${event.cid}`, color: "#374151" });
+      if (event.cid)    lines.push({
+        text: `           CID      ${event.cid}${event.cidFull ? " ↗" : ""}`,
+        color: "#374151",
+        href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
+      });
       if (event.success) {
         lines.push({ text: `           DECRYPT  ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
       } else {
@@ -91,6 +100,7 @@ interface TerminalLine {
   key: string;
   text: string;
   color?: string;
+  href?: string; // if set, line renders as a clickable anchor
   visible: string; // current visible portion (typewriter)
   done: boolean;
   historical?: boolean; // pre-existing on load — rendered instantly, dimmed
@@ -175,6 +185,7 @@ export default function LiveTerminal() {
                   key: `${event.id}-${i}`,
                   text: rl.text,
                   color: rl.color,
+                  href: rl.href,
                   visible: rl.text,
                   done: true,
                   historical: true,
@@ -216,6 +227,7 @@ export default function LiveTerminal() {
                 key: `${event.id}-${i}`,
                 text: rl.text,
                 color: rl.color,
+                href: rl.href,
                 visible: "",
                 done: false,
               });
@@ -279,25 +291,40 @@ export default function LiveTerminal() {
             <span className="text-xs opacity-50">Try the demo above to see live events</span>
           </div>
         ) : (
-          lines.map(line => (
-            <div
-              key={line.key}
-              className="whitespace-pre"
-              style={{
-                color: line.color ?? "#4b5563",
-                minHeight: "1.25rem",
-                opacity: 1,
-              }}
-            >
-              {line.visible}
-              {!line.done && line.text && (
-                <span
-                  className="inline-block w-1.5 h-3.5 ml-0.5 align-middle animate-pulse"
-                  style={{ background: line.color ?? "#4b5563" }}
-                />
-              )}
-            </div>
-          ))
+          lines.map(line => {
+            const inner = (
+              <>
+                {line.visible}
+                {!line.done && line.text && (
+                  <span
+                    className="inline-block w-1.5 h-3.5 ml-0.5 align-middle animate-pulse"
+                    style={{ background: line.color ?? "#4b5563" }}
+                  />
+                )}
+              </>
+            );
+            const sharedStyle = { color: line.color ?? "#4b5563", minHeight: "1.25rem" };
+            return line.href ? (
+              <a
+                key={line.key}
+                href={line.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="whitespace-pre block hover:opacity-70 transition-opacity"
+                style={{ ...sharedStyle, textDecoration: "none" }}
+              >
+                {inner}
+              </a>
+            ) : (
+              <div
+                key={line.key}
+                className="whitespace-pre"
+                style={sharedStyle}
+              >
+                {inner}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
