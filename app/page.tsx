@@ -69,18 +69,45 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Demo Panel ── */}
-        <section className="px-6 pb-20 max-w-2xl mx-auto">
-          <div className="text-center mb-8">
+        {/* ── Demo + Live Terminal (side-by-side) ── */}
+        <section className="px-6 pb-20 max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-4"
               style={{ borderColor: "rgba(0,168,255,0.3)", color: "#00a8ff", background: "rgba(0,168,255,0.08)" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#00a8ff] animate-pulse" />
               LIVE DEMO
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">Try MimirWell</h2>
-            <p className="text-gray-500 text-sm">Connect your wallet. Write a memory. Revoke it. Watch it seal.</p>
+            <p className="text-gray-500 text-sm">Connect your wallet. Write a memory. Revoke it. Watch it seal in real time.</p>
           </div>
-          <DemoPanel />
+
+          {/* Side-by-side grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-stretch">
+
+            {/* Left: Demo Panel */}
+            <div className="lg:col-span-2 flex flex-col">
+              <DemoPanel />
+            </div>
+
+            {/* Right: Live Terminal */}
+            <div className="lg:col-span-3 flex flex-col">
+              <div className="flex items-center gap-2 mb-3">
+                <span
+                  className="w-1.5 h-1.5 rounded-full animate-pulse"
+                  style={{ background: "#00a8ff", boxShadow: "0 0 6px #00a8ff" }}
+                />
+                <span className="text-xs font-bold tracking-widest" style={{ color: "#00a8ff" }}>
+                  LIVE NETWORK ACTIVITY
+                </span>
+                <span className="text-xs text-gray-600 ml-2 hidden sm:inline">— encrypt fragments visible, plaintext never exposed</span>
+              </div>
+              <div className="flex-1 flex flex-col min-h-0">
+                <LiveTerminal />
+              </div>
+            </div>
+
+          </div>
         </section>
 
         {/* ── Architecture ── */}
@@ -143,24 +170,6 @@ export default function Home() {
               <div><span style={{ color: "#6b7280" }}>GET</span> <span className="text-gray-300">/api/activity</span> <span className="text-gray-600 text-xs">— last 20 operations (no auth, nothing sensitive)</span></div>
             </div>
           </div>
-        </section>
-
-        {/* ── Live Terminal ── */}
-        <section className="px-6 pb-20 max-w-4xl mx-auto">
-          <div className="text-center mb-8">
-            <div
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-4"
-              style={{ borderColor: "rgba(0,168,255,0.3)", color: "#00a8ff", background: "rgba(0,168,255,0.08)" }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00a8ff] animate-pulse" />
-              LIVE NETWORK ACTIVITY
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Memory Operations</h2>
-            <p className="text-gray-500 text-sm">
-              Real-time cryptographic operations — encrypt fragments visible, plaintext never exposed.
-            </p>
-          </div>
-          <LiveTerminal />
         </section>
 
         {/* ── Build Log ── */}

@@ -200,7 +200,7 @@ export default function LiveTerminal() {
 
   return (
     <div
-      className="rounded-xl border overflow-hidden"
+      className="rounded-xl border overflow-hidden flex flex-col flex-1"
       style={{ borderColor: "rgba(0,168,255,0.12)", background: "rgba(0,0,0,0.6)" }}
     >
       {/* Header bar */}
@@ -225,8 +225,8 @@ export default function LiveTerminal() {
       {/* Terminal body */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto font-mono text-xs leading-relaxed p-4"
-        style={{ height: "320px", color: "#9ca3af" }}
+        className="overflow-y-auto font-mono text-xs leading-relaxed p-4 flex-1"
+        style={{ minHeight: "320px", color: "#9ca3af" }}
       >
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-700">
