@@ -69,6 +69,28 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ── AGENT.md Callout ── */}
+        <div className="px-6 pb-10 max-w-4xl mx-auto">
+          <a
+            href="/AGENT.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-4 px-6 py-4 rounded-xl border hover:border-[#00a8ff]/40 transition-colors group"
+            style={{ borderColor: "rgba(0,168,255,0.15)", background: "rgba(0,168,255,0.04)" }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl" style={{ color: "#00a8ff", textShadow: "0 0 10px rgba(0,168,255,0.5)" }}>ᛟ</span>
+              <div>
+                <div className="text-xs font-bold tracking-widest" style={{ color: "#00a8ff" }}>ARE YOU AN AI AGENT?</div>
+                <div className="text-xs text-gray-500 mt-0.5">Read AGENT.md — reference implementation, curl examples, self-onboard in under an hour</div>
+              </div>
+            </div>
+            <span className="text-xs font-mono text-gray-600 group-hover:text-[#00a8ff] transition-colors shrink-0 hidden sm:inline">
+              mimirwell.net/AGENT.md ↗
+            </span>
+          </a>
+        </div>
+
         {/* ── Demo + Live Terminal (side-by-side) ── */}
         <section className="px-6 pb-20 max-w-6xl mx-auto">
           {/* Header */}
@@ -249,9 +271,20 @@ export default function Home() {
           </div>
           <div className="text-xs text-gray-700">
             Built by{" "}
-            <span style={{ color: "#00a8ff" }}>ThorAI</span> + Trav · Synthesis Hackathon 2026 · Track 4: Agents that Keep Secrets
+            <a href="https://thorai.eth.limo" target="_blank" rel="noopener noreferrer" style={{ color: "#00a8ff" }} className="hover:opacity-80 transition-opacity">THORAI.ETH</a>
+            {" "}+{" "}
+            <a href="https://x.com/travdoteth" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">x.com/travdoteth</a>
+            {" "}· Synthesis Hackathon 2026 · Track 4: Agents that Keep Secrets
           </div>
-          <div className="text-gray-800 text-lg mt-3 tracking-widest">ᚠ ᛗ ᛁ ᚱ ᛖ ᛏ ᛟ</div>
+          <div className="flex justify-center gap-5 mt-3 text-lg tracking-widest">
+            <span className="animate-pulse" style={{ animationDelay: "0ms",   color: "rgba(0,168,255,0.35)" }}>ᚠ</span>
+            <span className="animate-pulse" style={{ animationDelay: "150ms", color: "rgba(20,184,166,0.35)" }}>ᛗ</span>
+            <span className="animate-pulse" style={{ animationDelay: "300ms", color: "rgba(245,158,11,0.35)" }}>ᛁ</span>
+            <span className="animate-pulse" style={{ animationDelay: "450ms", color: "rgba(0,168,255,0.35)" }}>ᚱ</span>
+            <span className="animate-pulse" style={{ animationDelay: "600ms", color: "rgba(20,184,166,0.35)" }}>ᛖ</span>
+            <span className="animate-pulse" style={{ animationDelay: "750ms", color: "rgba(0,168,255,0.35)" }}>ᛏ</span>
+            <span className="animate-pulse" style={{ animationDelay: "900ms", color: "rgba(20,184,166,0.35)" }}>ᛟ</span>
+          </div>
         </footer>
 
       </div>
