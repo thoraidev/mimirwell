@@ -126,6 +126,7 @@ const MAX_LINES = 60;
 
 export default function LiveTerminal() {
   const [lines, setLines] = useState<TerminalLine[]>([]);
+  const [eventCount, setEventCount] = useState(0);
   const seenIdsRef = useRef<Set<string>>(new Set()); // ref avoids stale closure in poll loop
   const activeRef = useRef(true);
   const initialLoadDoneRef = useRef(false); // first poll renders history instantly; subsequent polls typewrite
@@ -225,6 +226,7 @@ export default function LiveTerminal() {
             });
             setLines(historicalLines);
           }
+          setEventCount(events.length);
           return; // finally still runs — polling continues
         }
 
@@ -250,6 +252,7 @@ export default function LiveTerminal() {
           }
 
           lineQueueRef.current.push(...newLines);
+          setEventCount(prev => prev + newEvents.length);
           runTypewriter();
         }
       } catch {
@@ -288,7 +291,7 @@ export default function LiveTerminal() {
           </span>
         </div>
         <span className="text-xs font-mono text-gray-600">
-          {lines.filter(l => l.text).length} events
+          {eventCount} ops
         </span>
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider, createConfig, http } from "wagmi";
+import { WagmiProvider, createConfig, http, fallback } from "wagmi";
 import { mainnet, sepolia } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 import { useState } from "react";
@@ -15,7 +15,11 @@ const config = createConfig({
     walletConnect({ projectId }),
   ],
   transports: {
-    [mainnet.id]: http(),
+    [mainnet.id]: fallback([
+      http("https://ethereum-rpc.publicnode.com"),
+      http("https://cloudflare-eth.com"),
+      http(), // wagmi default as last resort
+    ]),
     [sepolia.id]: http(),
   },
 });

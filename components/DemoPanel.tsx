@@ -94,11 +94,11 @@ export default function DemoPanel() {
 
   // Contract write — revoke
   const { writeContract: writeRevoke, data: revokeTxHash, isPending: revokeIsPending, error: revokeError } = useWriteContract();
-  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({ hash: revokeTxHash });
+  const { isLoading: revokeConfirming, isSuccess: revokeConfirmed } = useWaitForTransactionReceipt({ hash: revokeTxHash, pollingInterval: 4000 });
 
   // Contract write — reinstate
   const { writeContract: writeReinstate, data: reinstateTxHash, isPending: reinstateIsPending, error: reinstateError } = useWriteContract();
-  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({ hash: reinstateTxHash });
+  const { isLoading: reinstateConfirming, isSuccess: reinstateConfirmed } = useWaitForTransactionReceipt({ hash: reinstateTxHash, pollingInterval: 4000 });
 
   // Derived crypto key — persists for the session, never leaves the browser
   const cryptoKeyRef = useRef<CryptoKey | null>(null);
@@ -298,10 +298,12 @@ export default function DemoPanel() {
             <span className="text-base mt-0.5 shrink-0">ᛏ</span>
             <div className="flex-1 min-w-0">
               <span className="text-[#00a8ff]/60">Agent · your wallet · encryption identity</span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[#00a8ff] break-all">{ownerEns ?? address}</span>
-                {ownerEns && <span className="text-[#00a8ff]/40 ml-1 break-all">{address}</span>}
-                <button onClick={() => navigator.clipboard.writeText(address)} title="Copy" className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto">⎘</button>
+              <div className="mt-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[#00a8ff] truncate">{ownerEns ?? `${address.slice(0, 6)}…${address.slice(-4)}`}</span>
+                  <button onClick={() => navigator.clipboard.writeText(address)} title="Copy" className="shrink-0 text-[#00a8ff]/40 hover:text-[#00a8ff] transition-colors cursor-pointer ml-auto">⎘</button>
+                </div>
+                {ownerEns && <div className="text-[#00a8ff]/30 text-xs mt-0.5">{address.slice(0, 6)}…{address.slice(-4)}</div>}
               </div>
             </div>
           </div>
@@ -309,9 +311,9 @@ export default function DemoPanel() {
             <span className="text-base mt-0.5 shrink-0">ᚨ</span>
             <div className="flex-1 min-w-0">
               <span className="text-[#14b8a6]/60">Owner · same wallet · holds the kill switch</span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[#14b8a6] break-all">{ownerEns ?? address}</span>
-                {ownerEns && <span className="text-[#14b8a6]/40 ml-1 break-all">{address}</span>}
+              <div className="mt-0.5">
+                <span className="text-[#14b8a6] truncate block">{ownerEns ?? `${address.slice(0, 6)}…${address.slice(-4)}`}</span>
+                {ownerEns && <div className="text-[#14b8a6]/30 text-xs mt-0.5">{address.slice(0, 6)}…{address.slice(-4)}</div>}
               </div>
             </div>
           </div>
