@@ -52,7 +52,7 @@ function renderLines(event: ActivityEvent): { text: string; color?: string }[] {
   switch (event.type) {
     case "REMEMBER":
       lines.push({ text: `[${event.ts}] ${rune} REMEMBER  ${agent} → Filecoin ✓`, color });
-      if (event.cipher) lines.push({ text: `           ENCRYPT  ${event.cipher}…`, color: "#4b5563" });
+      if (event.cipher) lines.push({ text: `           CIPHER   ${event.cipher}…`, color: "#4b5563" });
       if (event.cid)    lines.push({ text: `           CID      ${event.cid}`, color: "#374151" });
       break;
 

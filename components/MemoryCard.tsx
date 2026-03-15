@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export type MemoryState = "stored" | "recalled" | "sealed" | "idle";
 
@@ -48,8 +48,19 @@ const STATE_CONFIG: Record<MemoryState, { border: string; glow: string; label: s
 
 export default function MemoryCard({ cid, content, wallet, state = "idle", timestamp }: MemoryCardProps) {
   const [copied, setCopied] = useState(false);
+  const [walletName, setWalletName] = useState<string | null>(null);
   const cfg = STATE_CONFIG[state];
   const runes = STATE_RUNES[state];
+
+  // Resolve ENS primary name for the wallet address
+  useEffect(() => {
+    if (!wallet) return;
+    setWalletName(null);
+    fetch(`/api/ens-lookup?address=${encodeURIComponent(wallet)}`)
+      .then(r => r.json())
+      .then(d => setWalletName(d.name ?? null))
+      .catch(() => {});
+  }, [wallet]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -121,7 +132,7 @@ export default function MemoryCard({ cid, content, wallet, state = "idle", times
         <div className="mb-3">
           <div className="text-xs text-gray-500 mb-1">Owner</div>
           <div className="font-mono text-xs text-gray-400">
-            {wallet.slice(0, 8)}…{wallet.slice(-6)}
+            {walletName ?? `${wallet.slice(0, 8)}…${wallet.slice(-6)}`}
           </div>
         </div>
       )}
