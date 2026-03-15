@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   useAccount,
   useWriteContract,
-  useReadContract,
   useSwitchChain,
   useChainId,
-  useEnsAddress,
 } from "wagmi";
-import { normalize } from "viem/ens";
 import { mainnet } from "wagmi/chains";
 import { useTxReceipt } from "@/lib/useTxReceipt";
 
@@ -32,16 +29,6 @@ const REVOCATION_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
-  {
-    name: "isRevoked",
-    type: "function",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "agent", type: "address" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-  },
 ] as const;
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -53,13 +40,23 @@ export default function OwnerControls() {
 
   const wrongNetwork = isConnected && chainId !== mainnet.id;
 
-  // Raw input — accepts ENS name or hex address
-  const [agentInput, setAgentInput] = useState("");
-  const [normalizedEns, setNormalizedEns] = useState<string | undefined>();
-  const [ownerEns, setOwnerEns] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  // ── Input state ───────────────────────────────────────────────────────────
+  const [agentInput, setAgentInput]           = useState("");
+  const [agentAddress, setAgentAddress]       = useState<string | null>(null);   // resolved hex
+  const [ensDisplayName, setEnsDisplayName]   = useState<string | null>(null);   // "gokus.eth" when typed
+  const [ensLoading, setEnsLoading]           = useState(false);
+  const [ensError, setEnsError]               = useState<"not_found" | "rpc_error" | null>(null);
 
-  // ── Wagmi hooks ───────────────────────────────────────────────────────────
+  // ── On-chain revocation state ─────────────────────────────────────────────
+  const [onChainRevoked, setOnChainRevoked]   = useState<boolean | null>(null);
+  const [onChainLoading, setOnChainLoading]   = useState(false);
+  const [revokeFetchTick, setRevokeFetchTick] = useState(0); // increment to re-fetch
+
+  // ── Owner ENS display ─────────────────────────────────────────────────────
+  const [ownerEns, setOwnerEns]               = useState<string | null>(null);
+  const [status, setStatus]                   = useState<string | null>(null);
+
+  // ── Wagmi write hooks ─────────────────────────────────────────────────────
   const {
     writeContract: writeRevoke,
     data: revokeTxHash,
@@ -80,63 +77,75 @@ export default function OwnerControls() {
   const { confirmed: reinstateConfirmed, failed: reinstateTxFailed, polling: reinstateConfirming } =
     useTxReceipt(reinstateTxHash);
 
-  // ── ENS forward resolution (ENS name → address) ───────────────────────────
-  // Normalize in useEffect to safely handle viem/ens normalize() exceptions
+  // ── ENS forward resolution — server-side via /api/ens-forward ─────────────
+  // Replaces useEnsAddress (wagmi transport unreliable for reads)
   useEffect(() => {
     const trimmed = agentInput.trim();
-    const looksLikeEns = trimmed.includes(".") && !trimmed.startsWith("0x");
-    if (!looksLikeEns) {
-      setNormalizedEns(undefined);
+
+    // Reset resolution state whenever input changes
+    setAgentAddress(null);
+    setEnsError(null);
+    setEnsDisplayName(null);
+    setOnChainRevoked(null);
+
+    if (!trimmed) return;
+
+    // Direct hex address — no ENS needed
+    if (trimmed.startsWith("0x") && trimmed.length === 42) {
+      setAgentAddress(trimmed);
       return;
     }
-    try {
-      setNormalizedEns(normalize(trimmed));
-    } catch {
-      setNormalizedEns(undefined);
+
+    // Looks like an ENS name — forward-resolve via server
+    if (trimmed.includes(".")) {
+      setEnsLoading(true);
+      fetch(`/api/ens-forward?name=${encodeURIComponent(trimmed)}`)
+        .then((r) => r.json())
+        .then((d: { address?: string | null; error?: string }) => {
+          if (d.address) {
+            setAgentAddress(d.address);
+            setEnsDisplayName(trimmed);
+          } else {
+            setEnsError((d.error as "not_found" | "rpc_error") ?? "not_found");
+          }
+        })
+        .catch(() => setEnsError("rpc_error"))
+        .finally(() => setEnsLoading(false));
+      return;
     }
+
+    // Anything else — not a valid address or ENS name (no dot, not 0x)
+    // Leave agentAddress null; no hint shown until they type more
   }, [agentInput]);
 
-  // useEnsAddress resolves ENS name → hex address via mainnet
-  const { data: ensResolved, isLoading: ensLoading } = useEnsAddress({
-    name: normalizedEns,
-    chainId: mainnet.id,
-  });
+  // ── isRevoked check — server-side via /api/is-revoked ────────────────────
+  // Replaces useReadContract (wagmi transport unreliable for reads)
+  const fetchIsRevoked = useCallback(() => {
+    if (!address || !agentAddress || wrongNetwork) {
+      setOnChainRevoked(null);
+      return;
+    }
+    setOnChainLoading(true);
+    fetch(`/api/is-revoked?owner=${address}&agent=${agentAddress}`)
+      .then((r) => r.json())
+      .then((d: { revoked?: boolean }) => {
+        setOnChainRevoked(typeof d.revoked === "boolean" ? d.revoked : null);
+      })
+      .catch(() => setOnChainRevoked(null))
+      .finally(() => setOnChainLoading(false));
+  }, [address, agentAddress, wrongNetwork]);
 
-  // ── Resolved address — what actually gets passed to the contract ──────────
-  const trimmedInput = agentInput.trim();
-  const inputIsEns = !!normalizedEns;
-  const agentAddress: string | null = inputIsEns
-    ? (ensResolved ?? null)                               // ENS → resolved hex (or null if unresolved)
-    : trimmedInput.startsWith("0x") && trimmedInput.length === 42
-    ? trimmedInput                                        // direct hex address
-    : null;
+  useEffect(() => {
+    fetchIsRevoked();
+  }, [fetchIsRevoked, revokeFetchTick]);
 
-  // ── On-chain revocation status — free eth_call, no gas ───────────────────
-  // agentAddress is now available — safe to use in hook args
-  const {
-    data: onChainRevoked,
-    isLoading: onChainLoading,
-    refetch: refetchRevoked,
-  } = useReadContract({
-    address: REVOCATION_CONTRACT,
-    abi: REVOCATION_ABI,
-    functionName: "isRevoked",
-    args: address && agentAddress
-      ? [address as `0x${string}`, agentAddress as `0x${string}`]
-      : undefined,
-    chainId: mainnet.id,
-    query: { enabled: !!address && !!agentAddress && !wrongNetwork },
-  });
-
-  const isValidAddress = !!agentAddress;
-
-  // ── ENS reverse lookup for connected wallet (owner display) ───────────────
+  // ── Owner ENS reverse lookup ──────────────────────────────────────────────
   useEffect(() => {
     if (!address) return;
     setOwnerEns(null);
     fetch(`/api/ens-lookup?address=${encodeURIComponent(address)}`)
       .then((r) => r.json())
-      .then((d) => setOwnerEns(d.name ?? null))
+      .then((d: { name?: string | null }) => setOwnerEns(d.name ?? null))
       .catch(() => {});
   }, [address]);
 
@@ -152,9 +161,9 @@ export default function OwnerControls() {
   useEffect(() => {
     if (revokeConfirmed && revokeTxHash) {
       setStatus(`✓ Access revoked on-chain — tx: ${revokeTxHash.slice(0, 14)}… · https://etherscan.io/tx/${revokeTxHash}`);
-      refetchRevoked();
+      setRevokeFetchTick((n) => n + 1); // re-fetch isRevoked → badge flips to REVOKED
     }
-  }, [revokeConfirmed, revokeTxHash]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [revokeConfirmed, revokeTxHash]);
 
   useEffect(() => {
     if (revokeError) setStatus(`✗ ${revokeError.message?.split("\n")[0] ?? "Transaction failed"}`);
@@ -176,9 +185,9 @@ export default function OwnerControls() {
   useEffect(() => {
     if (reinstateConfirmed && reinstateTxHash) {
       setStatus(`✓ Access reinstated on-chain — tx: ${reinstateTxHash.slice(0, 14)}… · https://etherscan.io/tx/${reinstateTxHash}`);
-      refetchRevoked();
+      setRevokeFetchTick((n) => n + 1); // re-fetch isRevoked → badge flips to NOT revoked
     }
-  }, [reinstateConfirmed, reinstateTxHash]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reinstateConfirmed, reinstateTxHash]);
 
   useEffect(() => {
     if (reinstateError) setStatus(`✗ ${reinstateError.message?.split("\n")[0] ?? "Transaction failed"}`);
@@ -189,6 +198,7 @@ export default function OwnerControls() {
   }, [reinstateTxFailed]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+  const isValidAddress = !!agentAddress;
   const isBusy = revokeIsPending || revokeConfirming || reinstateIsPending || reinstateConfirming;
   const statusIsSuccess = status?.startsWith("✓");
   const statusIsError   = status?.startsWith("✗");
@@ -217,33 +227,51 @@ export default function OwnerControls() {
     });
   };
 
-  // ── Input hint text ───────────────────────────────────────────────────────
+  // ── Input hint ────────────────────────────────────────────────────────────
   const renderInputHint = () => {
-    if (!agentInput.trim()) return null;
+    const trimmed = agentInput.trim();
+    if (!trimmed) return null;
 
-    if (inputIsEns) {
-      if (ensLoading) return (
-        <p className="mt-1.5 text-xs text-gray-500">Resolving {agentInput.trim()}…</p>
-      );
-      if (ensResolved) return (
-        <p className="mt-1.5 text-xs" style={{ color: "#14b8a6" }}>
-          {agentInput.trim()} → {ensResolved.slice(0, 8)}…{ensResolved.slice(-6)} ✓
-        </p>
-      );
-      return (
-        <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.7)" }}>
-          ENS name not found on mainnet
-        </p>
-      );
-    }
+    // ENS loading
+    if (ensLoading) return (
+      <p className="mt-1.5 text-xs text-gray-500 font-mono">
+        Resolving {trimmed}…
+      </p>
+    );
 
-    if (!trimmedInput.startsWith("0x") || trimmedInput.length !== 42) {
-      return (
-        <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.7)" }}>
-          Enter a wallet address (0x…) or ENS name (name.eth)
-        </p>
-      );
-    }
+    // ENS resolved successfully
+    if (ensDisplayName && agentAddress) return (
+      <p className="mt-1.5 text-xs font-mono" style={{ color: "#14b8a6" }}>
+        {ensDisplayName} → {agentAddress.slice(0, 8)}…{agentAddress.slice(-6)} ✓
+      </p>
+    );
+
+    // ENS genuinely not registered
+    if (ensError === "not_found") return (
+      <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.8)" }}>
+        ENS name not registered on mainnet
+      </p>
+    );
+
+    // Network/RPC error — don't blame the user's ENS name
+    if (ensError === "rpc_error") return (
+      <p className="mt-1.5 text-xs" style={{ color: "rgba(245,158,11,0.8)" }}>
+        Network error — try pasting the wallet address directly (0x…)
+      </p>
+    );
+
+    // Invalid format
+    if (!trimmed.startsWith("0x") && !trimmed.includes(".")) return (
+      <p className="mt-1.5 text-xs text-gray-600">
+        Enter a wallet address (0x…) or ENS name (name.eth)
+      </p>
+    );
+
+    if (trimmed.startsWith("0x") && trimmed.length !== 42) return (
+      <p className="mt-1.5 text-xs" style={{ color: "rgba(239,68,68,0.7)" }}>
+        Wallet address must be 42 characters (0x + 40 hex)
+      </p>
+    );
 
     return null;
   };
@@ -259,11 +287,7 @@ export default function OwnerControls() {
       <div className="text-center mb-10">
         <div
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-4"
-          style={{
-            borderColor: "rgba(245,158,11,0.35)",
-            color: "#f59e0b",
-            background: "rgba(245,158,11,0.08)",
-          }}
+          style={{ borderColor: "rgba(245,158,11,0.35)", color: "#f59e0b", background: "rgba(245,158,11,0.08)" }}
         >
           <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#f59e0b" }} />
           OWNER CONTROLS
@@ -356,7 +380,7 @@ export default function OwnerControls() {
               />
               {renderInputHint()}
 
-              {/* On-chain status badge — visible once a valid address is entered */}
+              {/* On-chain status badge */}
               {isValidAddress && !wrongNetwork && (
                 <div className="mt-2 flex items-center gap-2">
                   {onChainLoading ? (
@@ -390,11 +414,7 @@ export default function OwnerControls() {
                 onClick={handleRevoke}
                 disabled={!isValidAddress || isBusy || wrongNetwork || ensLoading}
                 className="px-4 py-3 rounded-lg border text-sm font-bold tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110"
-                style={{
-                  borderColor: "rgba(245,158,11,0.45)",
-                  color: "#f59e0b",
-                  background: "rgba(245,158,11,0.08)",
-                }}
+                style={{ borderColor: "rgba(245,158,11,0.45)", color: "#f59e0b", background: "rgba(245,158,11,0.08)" }}
               >
                 {revokeIsPending ? "Waiting for MetaMask…"
                   : revokeConfirming ? "Confirming on-chain…"
@@ -405,11 +425,7 @@ export default function OwnerControls() {
                 onClick={handleReinstate}
                 disabled={!isValidAddress || isBusy || wrongNetwork || ensLoading}
                 className="px-4 py-3 rounded-lg border text-sm font-bold tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110"
-                style={{
-                  borderColor: "rgba(167,139,250,0.35)",
-                  color: "#a78bfa",
-                  background: "rgba(167,139,250,0.05)",
-                }}
+                style={{ borderColor: "rgba(167,139,250,0.35)", color: "#a78bfa", background: "rgba(167,139,250,0.05)" }}
               >
                 {reinstateIsPending ? "Waiting for MetaMask…"
                   : reinstateConfirming ? "Confirming on-chain…"
@@ -422,11 +438,7 @@ export default function OwnerControls() {
               <div
                 className="text-xs font-mono px-4 py-3 rounded-lg border leading-relaxed"
                 style={{
-                  borderColor: statusIsSuccess
-                    ? "rgba(20,184,166,0.3)"
-                    : statusIsError
-                    ? "rgba(239,68,68,0.3)"
-                    : "rgba(245,158,11,0.2)",
+                  borderColor: statusIsSuccess ? "rgba(20,184,166,0.3)" : statusIsError ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.2)",
                   color: statusIsSuccess ? "#14b8a6" : statusIsError ? "#ef4444" : "#f59e0b",
                   background: "rgba(0,0,0,0.3)",
                 }}
