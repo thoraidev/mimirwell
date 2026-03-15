@@ -78,7 +78,8 @@ async function decryptContent(encryptedBlob: string, key: CryptoKey): Promise<st
 interface MemoryEntry {
   cid: string;
   content?: string;
-  wallet: string;
+  agentWallet: string;
+  ownerWallet: string;
   state: MemoryState;
   timestamp: number;
 }
@@ -191,7 +192,7 @@ export default function DemoPanel() {
       if (!res.ok) throw new Error(data.error);
 
       setMemories((prev) => [
-        { cid: data.cid, content: memoryText.trim(), wallet: address ?? "", state: "stored", timestamp: Date.now() },
+        { cid: data.cid, content: memoryText.trim(), agentWallet: address ?? "", ownerWallet: address ?? "", state: "stored", timestamp: Date.now() },
         ...prev,
       ]);
       setMemoryText("");
@@ -218,7 +219,7 @@ export default function DemoPanel() {
 
       if (data.status === "denied") {
         setMemories((prev) => [
-          { cid: recallCid.trim(), wallet: address ?? "agent", state: "sealed", timestamp: Date.now() },
+          { cid: recallCid.trim(), agentWallet: address ?? "", ownerWallet: address ?? "", state: "sealed", timestamp: Date.now() },
           ...prev,
         ]);
         setStatus("✗ Access denied — revocation confirmed on-chain");
@@ -227,7 +228,7 @@ export default function DemoPanel() {
         const key = await ensureKey();
         const content = await decryptContent(data.encryptedBlob, key);
         setMemories((prev) => [
-          { cid: recallCid.trim(), content, wallet: data.agentWallet ?? address ?? "", state: "recalled", timestamp: Date.now() },
+          { cid: recallCid.trim(), content, agentWallet: data.agentWallet ?? address ?? "", ownerWallet: address ?? "", state: "recalled", timestamp: Date.now() },
           ...prev,
         ]);
         setRecallCid("");
@@ -475,7 +476,15 @@ export default function DemoPanel() {
           <h3 className="text-gray-500 text-xs tracking-widest mb-3 uppercase">Memory Log</h3>
           <div className="space-y-3">
             {memories.map((m, i) => (
-              <MemoryCard key={i} {...m} />
+              <MemoryCard
+                key={i}
+                cid={m.cid}
+                content={m.content}
+                agentWallet={m.agentWallet}
+                ownerWallet={m.ownerWallet}
+                state={m.state}
+                timestamp={m.timestamp}
+              />
             ))}
           </div>
         </div>

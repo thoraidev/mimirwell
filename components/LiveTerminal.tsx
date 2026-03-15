@@ -7,7 +7,9 @@ interface ActivityEvent {
   ts: string;
   type: "REMEMBER" | "RECALL" | "RECALL_DENIED" | "REVOKE" | "REINSTATED";
   agentWallet: string;
+  agentWalletFull?: string;
   ownerWallet?: string;
+  ownerWalletFull?: string;
   agentWalletName?: string | null;
   ownerWalletName?: string | null;
   cid?: string;
@@ -51,8 +53,18 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
     : "owner";
 
   switch (event.type) {
-    case "REMEMBER":
+    case "REMEMBER": {
       lines.push({ text: `[${event.ts}] ${rune} REMEMBER  ${agent} → Filecoin ✓`, color });
+      // Show owner only when different from agent (suppress in self-demo mode)
+      if (event.ownerWallet) {
+        const sameWallet =
+          event.agentWalletFull && event.ownerWalletFull &&
+          event.agentWalletFull.toLowerCase() === event.ownerWalletFull.toLowerCase();
+        if (!sameWallet) {
+          const ownerDisplay = displayWallet(event.ownerWallet, event.ownerWalletName);
+          lines.push({ text: `           OWNER    ${ownerDisplay}`, color: "#6b7280" });
+        }
+      }
       if (event.cipher) lines.push({ text: `           CIPHER   ${event.cipher}…`, color: "#4b5563" });
       if (event.cid)    lines.push({
         text: `           CID      ${event.cid}${event.cidFull ? " ↗" : ""}`,
@@ -60,6 +72,7 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
         href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
       });
       break;
+    }
 
     case "RECALL":
       lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}`, color });

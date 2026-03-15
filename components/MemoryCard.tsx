@@ -7,7 +7,8 @@ export type MemoryState = "stored" | "recalled" | "sealed" | "idle";
 interface MemoryCardProps {
   cid?: string;
   content?: string;
-  wallet?: string;
+  agentWallet?: string;
+  ownerWallet?: string;
   state?: MemoryState;
   timestamp?: number;
 }
@@ -46,21 +47,35 @@ const STATE_CONFIG: Record<MemoryState, { border: string; glow: string; label: s
   },
 };
 
-export default function MemoryCard({ cid, content, wallet, state = "idle", timestamp }: MemoryCardProps) {
+export default function MemoryCard({ cid, content, agentWallet, ownerWallet, state = "idle", timestamp }: MemoryCardProps) {
   const [copied, setCopied] = useState(false);
-  const [walletName, setWalletName] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState<string | null>(null);
   const cfg = STATE_CONFIG[state];
   const runes = STATE_RUNES[state];
 
-  // Resolve ENS primary name for the wallet address
+  const sameWallet = agentWallet && ownerWallet &&
+    agentWallet.toLowerCase() === ownerWallet.toLowerCase();
+
+  // Resolve ENS for agent wallet
   useEffect(() => {
-    if (!wallet) return;
-    setWalletName(null);
-    fetch(`/api/ens-lookup?address=${encodeURIComponent(wallet)}`)
+    if (!agentWallet) return;
+    setAgentName(null);
+    fetch(`/api/ens-lookup?address=${encodeURIComponent(agentWallet)}`)
       .then(r => r.json())
-      .then(d => setWalletName(d.name ?? null))
+      .then(d => setAgentName(d.name ?? null))
       .catch(() => {});
-  }, [wallet]);
+  }, [agentWallet]);
+
+  // Resolve ENS for owner wallet (skip if same as agent)
+  useEffect(() => {
+    if (!ownerWallet || sameWallet) return;
+    setOwnerName(null);
+    fetch(`/api/ens-lookup?address=${encodeURIComponent(ownerWallet)}`)
+      .then(r => r.json())
+      .then(d => setOwnerName(d.name ?? null))
+      .catch(() => {});
+  }, [ownerWallet, sameWallet]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -127,12 +142,22 @@ export default function MemoryCard({ cid, content, wallet, state = "idle", times
         </div>
       )}
 
-      {/* Wallet */}
-      {wallet && (
+      {/* Agent + Owner */}
+      {agentWallet && (
         <div className="mb-3">
-          <div className="text-xs text-gray-500 mb-1">Owner</div>
+          <div className="text-xs text-gray-500 mb-1">
+            {sameWallet ? "Wallet · agent & owner" : "Agent"}
+          </div>
           <div className="font-mono text-xs text-gray-400">
-            {walletName ?? `${wallet.slice(0, 8)}…${wallet.slice(-6)}`}
+            {agentName ?? `${agentWallet.slice(0, 8)}…${agentWallet.slice(-6)}`}
+          </div>
+        </div>
+      )}
+      {ownerWallet && !sameWallet && (
+        <div className="mb-3">
+          <div className="text-xs text-gray-500 mb-1">Owner · kill switch</div>
+          <div className="font-mono text-xs text-gray-400">
+            {ownerName ?? `${ownerWallet.slice(0, 8)}…${ownerWallet.slice(-6)}`}
           </div>
         </div>
       )}
