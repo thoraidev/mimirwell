@@ -54,20 +54,13 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
 
   switch (event.type) {
     case "REMEMBER": {
-      lines.push({ text: `[${event.ts}] ${rune} REMEMBER  ${agent} → Filecoin ✓`, color });
-      // Show owner only when different from agent (suppress in self-demo mode)
+      lines.push({ text: `[${event.ts}] ${rune} AGENT REMEMBER  ${agent} → Filecoin ✓`, color });
       if (event.ownerWallet) {
-        const sameWallet =
-          event.agentWalletFull && event.ownerWalletFull &&
-          event.agentWalletFull.toLowerCase() === event.ownerWalletFull.toLowerCase();
-        if (!sameWallet) {
-          const ownerDisplay = displayWallet(event.ownerWallet, event.ownerWalletName);
-          lines.push({ text: `           OWNER    ${ownerDisplay}`, color: "#6b7280" });
-        }
+        lines.push({ text: `           OWNER           ${displayWallet(event.ownerWallet, event.ownerWalletName)}`, color: "#6b7280" });
       }
-      if (event.cipher) lines.push({ text: `           CIPHER   ${event.cipher}…`, color: "#4b5563" });
+      if (event.cipher) lines.push({ text: `           CIPHER          ${event.cipher}…`, color: "#4b5563" });
       if (event.cid)    lines.push({
-        text: `           CID      ${event.cid}${event.cidFull ? " ↗" : ""}`,
+        text: `           CID             ${event.cid}${event.cidFull ? " ↗" : ""}`,
         color: "#374151",
         href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
       });
@@ -75,24 +68,19 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
     }
 
     case "RECALL":
-      lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}`, color });
+      lines.push({ text: `[${event.ts}] ${rune} AGENT RECALL    ${agent}`, color });
       if (event.ownerWallet) {
-        const sameWallet =
-          event.agentWalletFull && event.ownerWalletFull &&
-          event.agentWalletFull.toLowerCase() === event.ownerWalletFull.toLowerCase();
-        if (!sameWallet) {
-          lines.push({ text: `           OWNER    ${displayWallet(event.ownerWallet, event.ownerWalletName)}`, color: "#6b7280" });
-        }
+        lines.push({ text: `           OWNER           ${displayWallet(event.ownerWallet, event.ownerWalletName)}`, color: "#6b7280" });
       }
       if (event.cid)    lines.push({
-        text: `           CID      ${event.cid}${event.cidFull ? " ↗" : ""}`,
+        text: `           CID             ${event.cid}${event.cidFull ? " ↗" : ""}`,
         color: "#374151",
         href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
       });
       if (event.success) {
-        lines.push({ text: `           DECRYPT  ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
+        lines.push({ text: `           DECRYPT         ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
       } else {
-        lines.push({ text: `           DECRYPT  ✗  [failed — see server logs]`, color: "#ef4444" });
+        lines.push({ text: `           DECRYPT         ✗  [failed — see server logs]`, color: "#ef4444" });
       }
       break;
 
@@ -100,22 +88,22 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
       const deniedOwner = event.ownerWallet
         ? displayWallet(event.ownerWallet, event.ownerWalletName)
         : "owner";
-      lines.push({ text: `[${event.ts}] ${rune} RECALL    ${agent}  ← DENIED`, color });
-      lines.push({ text: `           OWNER    ${deniedOwner}  sealed this agent`, color: "#6b7280" });
-      lines.push({ text: `           CHAIN    isRevoked() = true  [access sealed]`, color: "#ef4444" });
+      lines.push({ text: `[${event.ts}] ${rune} AGENT RECALL    ${agent}  ← DENIED`, color });
+      lines.push({ text: `           OWNER           ${deniedOwner}  sealed this agent`, color: "#6b7280" });
+      lines.push({ text: `           CHAIN           isRevoked() = true  [access sealed]`, color: "#ef4444" });
       break;
     }
 
     case "REVOKE":
       lines.push({
-        text: `[${event.ts}] ${rune} REVOKE    ${owner} → sealed ${agent}`,
+        text: `[${event.ts}] ${rune} REVOKE          ${owner} → sealed ${agent}`,
         color,
       });
-      if (event.txHash) lines.push({ text: `           CHAIN    tx ${event.txHash.slice(0, 14)}… confirmed`, color: "#6b7280" });
+      if (event.txHash) lines.push({ text: `           CHAIN           tx ${event.txHash.slice(0, 14)}… confirmed`, color: "#6b7280" });
       break;
 
     case "REINSTATED":
-      lines.push({ text: `[${event.ts}] ${rune} REINSTATE ${owner} → unlocked ${agent}`, color });
+      lines.push({ text: `[${event.ts}] ${rune} REINSTATE       ${owner} → unlocked ${agent}`, color });
       break;
   }
 
