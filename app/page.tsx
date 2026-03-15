@@ -1,5 +1,6 @@
 import AsgardBackground from "@/components/AsgardBackground";
 import ConnectWallet from "@/components/ConnectWallet";
+import CopyBar from "@/components/CopyBar";
 import DemoPanel from "@/components/DemoPanel";
 import LiveTerminal from "@/components/LiveTerminal";
 
@@ -89,6 +90,9 @@ export default function Home() {
               mimirwell.net/AGENT.md ↗
             </span>
           </a>
+          <div className="mt-2">
+            <CopyBar url="https://mimirwell.net/AGENT.md" />
+          </div>
         </div>
 
         {/* ── Demo + Live Terminal (side-by-side) ── */}
@@ -273,7 +277,7 @@ export default function Home() {
             Built by{" "}
             <a href="https://thorai.eth.limo" target="_blank" rel="noopener noreferrer" style={{ color: "#00a8ff" }} className="hover:opacity-80 transition-opacity">THORAI.ETH</a>
             {" "}+{" "}
-            <a href="https://x.com/travdoteth" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">x.com/travdoteth</a>
+            <a href="https://x.com/travdoteth" target="_blank" rel="noopener noreferrer" style={{ color: "#14b8a6" }} className="hover:opacity-80 transition-opacity">TRAV.ETH</a>
             {" "}· Synthesis Hackathon 2026 · Track 4: Agents that Keep Secrets
           </div>
           <div className="flex justify-center gap-5 mt-3 text-lg tracking-widest">
