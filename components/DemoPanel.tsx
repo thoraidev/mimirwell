@@ -407,6 +407,7 @@ export default function DemoPanel() {
         <p className="text-xs text-gray-500 mb-4">
           Your wallet signs directly on-chain. MetaMask will open — you pay ~$0.05 gas.
           No server involvement. <span className="text-red-400/60">Revocable on-chain. Reversible via Reinstate.</span>
+          <br /><span className="text-gray-600">In this demo you are both agent and owner. In production: the human owner revokes the AI agent's address.</span>
         </p>
         <input
           value={revokeAgent}
