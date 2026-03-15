@@ -54,7 +54,7 @@ export default function Home() {
             {[
               { label: "Storage", value: "Filecoin", sub: "Permanent" },
               { label: "Encryption", value: "AES-256-GCM", sub: "Zero-knowledge" },
-              { label: "Identity", value: "ENS / Ethereum", sub: "Agent-sovereign" },
+
               { label: "API", value: "3 endpoints", sub: "Any language" },
             ].map((s) => (
               <div

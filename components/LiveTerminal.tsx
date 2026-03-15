@@ -286,7 +286,7 @@ export default function LiveTerminal() {
               style={{
                 color: line.color ?? "#4b5563",
                 minHeight: "1.25rem",
-                opacity: line.historical ? 0.38 : 1,
+                opacity: 1,
               }}
             >
               {line.visible}
