@@ -1,18 +1,23 @@
 /**
  * GET /api/agent-info
- * Returns the agent's public wallet address.
- * Safe to expose — public key only, never the private key.
+ * Returns the agent's public identity.
+ *
+ * agentWallet = thorai.eth — ThorAI's canonical on-chain identity (keyring wallet).
+ * This is the wallet used for:
+ *   - Memory encryption key derivation (HKDF from wallet signature)
+ *   - Revocation target shown in the DemoPanel
+ *
+ * Safe to expose — public address only.
  */
 
 import { NextResponse } from "next/server";
-import { getAgentAddress } from "@/lib/agent-info";
+
+// thorai.eth — ThorAI's public identity
+const THORAI_ADDRESS = "0x8884AE2D5A381833565A8AAe6BD38bc3E4520412";
 
 export async function GET() {
-  try {
-    const agentWallet = getAgentAddress();
-    return NextResponse.json({ agentWallet });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({
+    agentWallet: THORAI_ADDRESS,
+    agentEns: "thorai.eth",
+  });
 }
