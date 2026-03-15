@@ -3,6 +3,7 @@ import ConnectWallet from "@/components/ConnectWallet";
 import CopyBar from "@/components/CopyBar";
 import DemoPanel from "@/components/DemoPanel";
 import LiveTerminal from "@/components/LiveTerminal";
+import OwnerControls from "@/components/OwnerControls";
 
 export default function Home() {
   return (
@@ -95,6 +96,26 @@ export default function Home() {
           </div>
         </div>
 
+        {/* ── Owner Controls Callout Bar ── */}
+        <div className="px-6 pb-6 max-w-4xl mx-auto">
+          <a
+            href="#owner-controls"
+            className="flex items-center justify-between gap-4 px-6 py-4 rounded-xl border hover:border-[#f59e0b]/50 transition-colors group"
+            style={{ borderColor: "rgba(245,158,11,0.2)", background: "rgba(245,158,11,0.04)" }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl" style={{ color: "#f59e0b", textShadow: "0 0 10px rgba(245,158,11,0.5)" }}>ᚨ</span>
+              <div>
+                <div className="text-xs font-bold tracking-widest" style={{ color: "#f59e0b" }}>HUMAN OWNER?</div>
+                <div className="text-xs text-gray-500 mt-0.5">Connect your wallet — revoke or reinstate any agent&apos;s access in one mainnet transaction</div>
+              </div>
+            </div>
+            <span className="text-xs font-mono text-gray-600 group-hover:text-[#f59e0b] transition-colors shrink-0 hidden sm:inline">
+              OWNER CONTROLS ↓
+            </span>
+          </a>
+        </div>
+
         {/* ── Demo + Live Terminal (side-by-side) ── */}
         <section className="px-6 pb-20 max-w-6xl mx-auto">
           {/* Header */}
@@ -133,6 +154,9 @@ export default function Home() {
 
           </div>
         </section>
+
+        {/* ── Owner Controls ── */}
+        <OwnerControls />
 
         {/* ── Architecture ── */}
         <section className="px-6 pb-20 max-w-4xl mx-auto">
