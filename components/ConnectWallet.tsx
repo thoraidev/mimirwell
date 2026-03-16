@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 
@@ -7,6 +8,19 @@ export default function ConnectWallet() {
   const { address, isConnected } = useAccount();
   const { connect, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const [ensName, setEnsName] = useState<string | null>(null);
+
+  // Reverse ENS resolution — bypass wagmi reads (transport broken), use server endpoint
+  useEffect(() => {
+    if (!address) { setEnsName(null); return; }
+    setEnsName(null); // reset on wallet change
+    fetch(`/api/ens-lookup?address=${address}`)
+      .then(r => r.json())
+      .then(d => { if (d.name) setEnsName(d.name); })
+      .catch(() => { /* silently fall back to hex */ });
+  }, [address]);
+
+  const displayName = ensName ?? (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "");
 
   if (isConnected && address) {
     return (
@@ -14,7 +28,7 @@ export default function ConnectWallet() {
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#00a8ff]/30 bg-[#00a8ff]/5">
           <div className="w-2 h-2 rounded-full bg-[#14b8a6] shadow-[0_0_6px_#14b8a6] animate-pulse" />
           <span className="text-sm font-mono text-[#14b8a6]">
-            {address.slice(0, 6)}…{address.slice(-4)}
+            {displayName}
           </span>
         </div>
         <button
