@@ -5,7 +5,7 @@
  * Extracted so API routes can call it directly without internal HTTP fetches.
  */
 
-import { createPublicClient, http, encodeFunctionData } from "viem";
+import { createPublicClient, fallback, http, encodeFunctionData } from "viem";
 import { mainnet } from "viem/chains";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const siwaKeystore = require("@buildersgarden/siwa/keystore") as {
@@ -87,7 +87,11 @@ export async function executeRevoke(rawAgent: string, rawOwner: string): Promise
 
   const client = createPublicClient({
     chain: mainnet,
-    transport: http("https://ethereum-rpc.publicnode.com"),
+    transport: fallback([
+      http("https://ethereum-rpc.publicnode.com"),
+      http("https://cloudflare-eth.com"),
+      http("https://eth.llamarpc.com"),
+    ]),
   });
 
   const data = encodeFunctionData({
@@ -166,7 +170,11 @@ export async function executeReinstate(rawAgent: string, rawOwner: string): Prom
 
   const client = createPublicClient({
     chain: mainnet,
-    transport: http("https://ethereum-rpc.publicnode.com"),
+    transport: fallback([
+      http("https://ethereum-rpc.publicnode.com"),
+      http("https://cloudflare-eth.com"),
+      http("https://eth.llamarpc.com"),
+    ]),
   });
 
   const data = encodeFunctionData({

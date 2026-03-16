@@ -5,13 +5,17 @@
  * Uses Ethereum mainnet for resolution.
  */
 
-import { createPublicClient, http, isAddress } from 'viem';
+import { createPublicClient, fallback, http, isAddress } from 'viem';
 import { mainnet } from 'viem/chains';
 import { normalize } from 'viem/ens';
 
 const ensClient = createPublicClient({
   chain: mainnet,
-  transport: http('https://ethereum-rpc.publicnode.com'),
+  transport: fallback([
+    http('https://ethereum-rpc.publicnode.com'),
+    http('https://cloudflare-eth.com'),
+    http('https://eth.llamarpc.com'),
+  ]),
 });
 
 /**

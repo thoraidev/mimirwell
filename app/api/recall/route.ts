@@ -22,7 +22,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, fallback, http } from "viem";
 import { mainnet } from "viem/chains";
 import { fetchFromFilecoin } from "@/lib/lighthouse";
 import { isRevokedCached, REVOCATION_CONTRACT, REVOCATION_ABI } from "@/lib/revoke-core";
@@ -32,7 +32,11 @@ import { getAgentAddress } from "@/lib/agent-info";
 
 const publicClient = createPublicClient({
   chain: mainnet,
-  transport: http("https://ethereum-rpc.publicnode.com"),
+  transport: fallback([
+    http("https://ethereum-rpc.publicnode.com"),
+    http("https://cloudflare-eth.com"),
+    http("https://eth.llamarpc.com"),
+  ]),
 });
 
 // On-chain is authoritative — always check contract, use cache only as RPC fallback.

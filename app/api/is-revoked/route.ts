@@ -10,13 +10,17 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http, isAddress } from "viem";
+import { createPublicClient, fallback, http, isAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { REVOCATION_CONTRACT, REVOCATION_ABI } from "@/lib/revoke-core";
 
 const client = createPublicClient({
   chain: mainnet,
-  transport: http("https://ethereum-rpc.publicnode.com"),
+  transport: fallback([
+    http("https://ethereum-rpc.publicnode.com"),
+    http("https://cloudflare-eth.com"),
+    http("https://eth.llamarpc.com"),
+  ]),
 });
 
 export async function GET(req: NextRequest) {

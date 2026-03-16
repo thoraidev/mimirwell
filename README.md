@@ -142,8 +142,6 @@ What was built during the hackathon:
 
 2. **No rate limiting.** The API is open. Lighthouse storage costs are real.
 
-3. **Single RPC endpoint.** Ethereum reads use publicnode.com. No fallback currently.
-
 ---
 
 ## Future Work
