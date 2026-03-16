@@ -106,7 +106,7 @@ One contract, deployed once, shared by all agents and owners on the network.
 |-----------|-----|---------------|
 | Deploy (once, ever) | ~176k | ~$10 |
 | Store / recall memory | 0 | Free |
-| Revoke (emergency) | ~45k | ~$2–5 |
+| Revoke (emergency) | ~45k | ~$0.05–$0.50 |
 
 ---
 
