@@ -1,0 +1,23 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "MimirWellRevocation.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\n/**\n * @title MimirWellRevocation\n * @notice On-chain revocation registry for MimirWell agent memory.\n *\n * One contract. Deployed once. Every agent on the MimirWell network uses it.\n *\n * Any owner can revoke any agent wallet's decrypt rights.\n * MimirWell server checks isRevoked() at every recall attempt — enforced before returning the encrypted blob.\n *\n * Gas economics:\n *   - Deploy (once, ever):        ~$10-15\n *   - Store/recall memory:        FREE (no gas)\n *   - Revoke (rare/emergency):    ~$2-5\n */\ncontract MimirWellRevocation {\n    /// @notice owner => agent => revoked\n    mapping(address => mapping(address => bool)) public revoked;\n\n    event Revoked(address indexed owner, address indexed agent);\n    event Reinstated(address indexed owner, address indexed agent);\n\n    /// @notice Owner permanently seals an agent's decrypt rights.\n    function revoke(address agent) external {\n        revoked[msg.sender][agent] = true;\n        emit Revoked(msg.sender, agent);\n    }\n\n    /// @notice Owner reinstates a previously revoked agent.\n    function reinstate(address agent) external {\n        revoked[msg.sender][agent] = false;\n        emit Reinstated(msg.sender, agent);\n    }\n\n    /// @notice Returns true if the agent has been revoked by this owner.\n    /// @dev Called by MimirWell server before returning encrypted blobs. Also callable by external agents.\n    function isRevoked(address owner, address agent) external view returns (bool) {\n        return revoked[owner][agent];\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode"
+        ]
+      }
+    },
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    }
+  }
+}
