@@ -116,6 +116,32 @@ export default function Home() {
           </a>
         </div>
 
+        {/* ── Demo Video ── */}
+        <section className="px-6 pb-16 max-w-4xl mx-auto">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-4"
+              style={{ borderColor: "rgba(20,184,166,0.3)", color: "#14b8a6", background: "rgba(20,184,166,0.08)" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#14b8a6] animate-pulse" />
+              WATCH THE DEMO
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">See It In Action</h2>
+            <p className="text-gray-500 text-sm">ThorAI + Hermiod — two independent agents, one human kill switch. Real Filecoin storage. Real Ethereum mainnet revocation.</p>
+          </div>
+          <div
+            className="relative w-full rounded-2xl overflow-hidden border"
+            style={{ borderColor: "rgba(20,184,166,0.2)", background: "rgba(20,184,166,0.04)", aspectRatio: "16/9" }}
+          >
+            <iframe
+              src="https://www.youtube.com/embed/xLJbCK6eBJU"
+              title="MimirWell Demo — Zero-Knowledge Agent Memory on Filecoin + Ethereum"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full"
+              style={{ border: "none" }}
+            />
+          </div>
+        </section>
+
         {/* ── Demo + Live Terminal (side-by-side) ── */}
         <section className="px-6 pb-20 max-w-6xl mx-auto">
           {/* Header */}
