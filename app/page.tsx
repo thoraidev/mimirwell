@@ -254,9 +254,14 @@ export default function Home() {
           </div>
 
           <div
-            className="rounded-xl border p-6 space-y-5"
+            className="rounded-xl border"
             style={{ borderColor: "rgba(0,168,255,0.1)", background: "rgba(0,168,255,0.03)" }}
           >
+            {/* Scrollable inner */}
+            <div
+              className="p-6 space-y-5 overflow-y-auto"
+              style={{ maxHeight: "520px", scrollbarWidth: "thin", scrollbarColor: "rgba(0,168,255,0.2) transparent" }}
+            >
             {[
               {
                 time: "Day 1 — 13 Mar 2026",
@@ -282,15 +287,22 @@ export default function Home() {
               {
                 time: "Day 4 — 15 Mar 2026",
                 rune: "ᛏ",
-                title: "thorai.eth + AGENT.md + demo script",
-                desc: "thorai.eth established as ThorAI's canonical agent identity. Keyring proxy signs the derivation message with thorai.eth → HKDF → AES key — identical algorithm to the browser. demo-thorai.mjs: ThorAI signs, encrypts, stores on Filecoin as thorai.eth, recalls, decrypts, verifies integrity. trav.eth is the owner. AGENT.md live at mimirwell.net/AGENT.md — any agent can self-onboard in minutes.",
+                title: "thorai.eth + AGENT.md + first agent integration",
+                desc: "thorai.eth established as ThorAI's canonical agent identity. Keyring proxy signs the derivation message with thorai.eth → HKDF → AES key — identical algorithm to the browser DemoPanel. ThorAI integrated with MimirWell using its own wallet: signed, encrypted locally, stored on Filecoin as thorai.eth, recalled and decrypted. The same pattern any agent follows using AGENT.md. The agent that built MimirWell is also its first real user. AGENT.md live at mimirwell.net/AGENT.md — any agent can self-onboard in minutes.",
                 color: "#a78bfa",
               },
-            ].map((entry, i) => (
+              {
+                time: "Day 5 — 17 Mar 2026",
+                rune: "ᛊ",
+                title: "Demo video + social presence + Hermiod proves the protocol",
+                desc: "Full demo video recorded at 1920×1080. Two independent agents ran the complete loop — ThorAI (thorai.eth) and Hermiod, a completely fresh agent with zero prior context. Hermiod self-onboarded via AGENT.md and completed store → recall → revoke → DENIED → reinstate → recall autonomously. 100% one-shot, no retakes. Real Filecoin, real Ethereum mainnet. OG social card live — runic MIMIR logo displays on every share of mimirwell.net. Title and description updated.",
+                color: "#00a8ff",
+              },
+            ].map((entry, i, arr) => (
               <div key={i} className="flex gap-4">
                 <div className="flex-shrink-0 flex flex-col items-center">
                   <span className="text-xl" style={{ color: entry.color, textShadow: `0 0 10px ${entry.color}60` }}>{entry.rune}</span>
-                  {i < 3 && <div className="w-px flex-1 mt-2" style={{ background: "rgba(0,168,255,0.1)" }} />}
+                  {i < arr.length - 1 && <div className="w-px flex-1 mt-2" style={{ background: "rgba(0,168,255,0.1)" }} />}
                 </div>
                 <div className="pb-4">
                   <div className="text-xs text-gray-600 mb-1 font-mono">{entry.time}</div>
@@ -299,6 +311,11 @@ export default function Home() {
                 </div>
               </div>
             ))}
+            </div>
+            {/* Scroll hint */}
+            <div className="px-6 py-3 border-t text-center" style={{ borderColor: "rgba(0,168,255,0.08)" }}>
+              <span className="text-xs text-gray-700 font-mono">scroll for full build log ↕</span>
+            </div>
           </div>
         </section>
 
