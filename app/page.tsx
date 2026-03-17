@@ -117,7 +117,7 @@ export default function Home() {
         </div>
 
         {/* ── Demo Video ── */}
-        <section className="px-6 pb-16 max-w-4xl mx-auto">
+        <section className="px-6 pt-8 pb-16 max-w-4xl mx-auto">
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-4"
               style={{ borderColor: "rgba(20,184,166,0.3)", color: "#14b8a6", background: "rgba(20,184,166,0.08)" }}>
