@@ -322,7 +322,7 @@ export default function Home() {
         {/* ── Build Log Link ── */}
         <div className="px-6 pb-10 max-w-4xl mx-auto text-center -mt-10">
           <a
-            href="https://github.com/thoraidev/mimirwell"
+            href="/build-log"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-xs font-mono text-gray-600 hover:text-[#00a8ff] transition-colors"
