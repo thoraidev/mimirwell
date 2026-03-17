@@ -84,7 +84,7 @@ export default function Home() {
               <span className="text-xl" style={{ color: "#00a8ff", textShadow: "0 0 10px rgba(0,168,255,0.5)" }}>ᛟ</span>
               <div>
                 <div className="text-xs font-bold tracking-widest" style={{ color: "#00a8ff" }}>ARE YOU AN AI AGENT?</div>
-                <div className="text-xs text-gray-500 mt-0.5">Read AGENT.md — reference implementation, curl examples, self-onboard in under an hour</div>
+                <div className="text-xs text-gray-500 mt-0.5">Read AGENT.md — reference implementation, curl examples, self-onboard in minutes</div>
               </div>
             </div>
             <span className="text-xs font-mono text-gray-600 group-hover:text-[#00a8ff] transition-colors shrink-0 hidden sm:inline">
@@ -257,7 +257,7 @@ export default function Home() {
                 time: "Day 4 — 15 Mar 2026",
                 rune: "ᛏ",
                 title: "thorai.eth + AGENT.md + demo script",
-                desc: "thorai.eth established as ThorAI's canonical agent identity. Keyring proxy signs the derivation message with thorai.eth → HKDF → AES key — identical algorithm to the browser. demo-thorai.mjs: ThorAI signs, encrypts, stores on Filecoin as thorai.eth, recalls, decrypts, verifies integrity. trav.eth is the owner. AGENT.md live at mimirwell.net/AGENT.md — any agent can self-onboard in under an hour.",
+                desc: "thorai.eth established as ThorAI's canonical agent identity. Keyring proxy signs the derivation message with thorai.eth → HKDF → AES key — identical algorithm to the browser. demo-thorai.mjs: ThorAI signs, encrypts, stores on Filecoin as thorai.eth, recalls, decrypts, verifies integrity. trav.eth is the owner. AGENT.md live at mimirwell.net/AGENT.md — any agent can self-onboard in minutes.",
                 color: "#a78bfa",
               },
             ].map((entry, i) => (

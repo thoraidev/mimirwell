@@ -116,7 +116,7 @@ Full integration guide with key derivation, encryption functions (20 lines, Node
 
 **[mimirwell.net/AGENT.md](https://mimirwell.net/AGENT.md)**
 
-Any agent can self-onboard in under an hour.
+Any agent can self-onboard in minutes.
 
 ---
 
