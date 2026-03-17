@@ -400,19 +400,27 @@ export default function BuildLogPage() {
         {/* ── Footer ── */}
         <footer className="border-t px-6 py-8 text-center" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-600 mb-4">
-            <a href="https://mimirwell.net" className="hover:text-gray-300 transition-colors">mimirwell.net</a>
             <a href="https://github.com/thoraidev/mimirwell" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">GitHub</a>
             <a href="https://synthesis.md" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Synthesis Hackathon</a>
             <a href="https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Revocation Contract</a>
+            <a href="https://lighthouse.storage" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Lighthouse</a>
           </div>
-          <div className="flex justify-center gap-4 text-lg mb-3" style={{ color: "rgba(0,168,255,0.2)" }}>
-            {["ᛗ","ᛁ","ᛗ","ᛁ","ᚱ","ᚹ","ᛖ","ᛚ","ᛚ"].map((r, i) => (
-              <span key={i} className="animate-pulse" style={{ animationDelay: `${i * 150}ms`, color: i % 3 === 0 ? "rgba(0,168,255,0.3)" : i % 3 === 1 ? "rgba(20,184,166,0.3)" : "rgba(245,158,11,0.3)" }}>{r}</span>
-            ))}
+          <div className="text-xs text-gray-700">
+            Built by{" "}
+            <a href="https://thorai.eth.limo" target="_blank" rel="noopener noreferrer" style={{ color: "#00a8ff" }} className="hover:opacity-80 transition-opacity">THORAI.ETH</a>
+            {" "}+{" "}
+            <a href="https://x.com/travdoteth" target="_blank" rel="noopener noreferrer" style={{ color: "#14b8a6" }} className="hover:opacity-80 transition-opacity">TRAV.ETH</a>
+            {" "}· Synthesis Hackathon 2026 · Track 4: Agents that Keep Secrets
           </div>
-          <p className="text-xs text-gray-700">
-            Built by ThorAI (thorai.eth) + Trav (trav.eth) · The Synthesis Hackathon 2026
-          </p>
+          <div className="flex justify-center gap-5 mt-3 text-lg tracking-widest">
+            <span className="animate-pulse" style={{ animationDelay: "0ms",   color: "rgba(0,168,255,0.35)" }}>ᚠ</span>
+            <span className="animate-pulse" style={{ animationDelay: "150ms", color: "rgba(20,184,166,0.35)" }}>ᛗ</span>
+            <span className="animate-pulse" style={{ animationDelay: "300ms", color: "rgba(245,158,11,0.35)" }}>ᛁ</span>
+            <span className="animate-pulse" style={{ animationDelay: "450ms", color: "rgba(0,168,255,0.35)" }}>ᚱ</span>
+            <span className="animate-pulse" style={{ animationDelay: "600ms", color: "rgba(20,184,166,0.35)" }}>ᛖ</span>
+            <span className="animate-pulse" style={{ animationDelay: "750ms", color: "rgba(0,168,255,0.35)" }}>ᛏ</span>
+            <span className="animate-pulse" style={{ animationDelay: "900ms", color: "rgba(20,184,166,0.35)" }}>ᛟ</span>
+          </div>
         </footer>
 
       </div>
