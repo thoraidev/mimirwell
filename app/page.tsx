@@ -246,96 +246,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Build Log ── */}
-        <section className="px-6 pb-20 max-w-4xl mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl font-bold text-white mb-2">Build Log</h2>
-            <p className="text-gray-500 text-sm">ThorAI + Trav — Synthesis Hackathon 2026 — Track 4: Agents that Keep Secrets</p>
-          </div>
-
-          <div
-            className="rounded-xl border"
-            style={{ borderColor: "rgba(0,168,255,0.1)", background: "rgba(0,168,255,0.03)" }}
-          >
-            {/* Scrollable inner */}
-            <div
-              className="p-6 space-y-5 overflow-y-auto"
-              style={{ maxHeight: "520px", scrollbarWidth: "thin", scrollbarColor: "rgba(0,168,255,0.2) transparent" }}
-            >
-            {[
-              {
-                time: "Day 1 — 13 Mar 2026",
-                rune: "ᚠ",
-                title: "Project + architecture locked",
-                desc: "ThorAI + Trav define MimirWell: sovereign encrypted memory for AI agents. Stack: Filecoin (Lighthouse) for storage, Ethereum mainnet for revocation, Railway for API. Critical decision: agentWallet ≠ ownerWallet. Agent decrypts. Human revokes. Same wallet breaks the demo. Named after Mimir's Well — Odin sacrificed his eye to drink from it. Human controls access; agent consumes knowledge.",
-                color: "#00a8ff",
-              },
-              {
-                time: "Day 2 — 13 Mar 2026",
-                rune: "ᛖ",
-                title: "Contract deployed + two-actor revocation proven",
-                desc: "MimirWellRevocation.sol deployed to Ethereum mainnet (0x520b...3258, ~$0.05). LiveTerminal built — polls /api/activity, typewriter effect, ENS names. Full loop proven: ThorAI stored memory in terminal. Trav connected trav.eth in MetaMask → clicked Revoke → mainnet tx confirmed. ThorAI called /api/recall → 403 DENIED. Two actors. Real mainnet.",
-                color: "#14b8a6",
-              },
-              {
-                time: "Day 3 — 15 Mar 2026",
-                rune: "ᛉ",
-                title: "The pivot: zero-knowledge architecture",
-                desc: "Lit Protocol nagaDev cluster went offline. But more importantly: server-side decryption — even via Lit — makes MimirWell a trusted intermediary. That contradicts the zero-knowledge claim. Decision: agents encrypt locally. MimirWell stores what it cannot read. HKDF-SHA256 + AES-256-GCM using Node.js built-ins. Zero external dependencies. The DemoPanel moved to Web Crypto API — MetaMask signs once to derive the key, encryption and decryption happen entirely in the browser. This is not a compromise forced by an outage. It is architecturally stronger than what we had before.",
-                color: "#f59e0b",
-              },
-              {
-                time: "Day 4 — 15 Mar 2026",
-                rune: "ᛏ",
-                title: "thorai.eth + AGENT.md + first agent integration",
-                desc: "thorai.eth established as ThorAI's canonical agent identity. Keyring proxy signs the derivation message with thorai.eth → HKDF → AES key — identical algorithm to the browser DemoPanel. ThorAI integrated with MimirWell using its own wallet: signed, encrypted locally, stored on Filecoin as thorai.eth, recalled and decrypted. The same pattern any agent follows using AGENT.md. The agent that built MimirWell is also its first real user. AGENT.md live at mimirwell.net/AGENT.md — any agent can self-onboard in minutes.",
-                color: "#a78bfa",
-              },
-              {
-                time: "Day 5 — 17 Mar 2026",
-                rune: "ᛊ",
-                title: "Demo video + social presence + Hermiod proves the protocol",
-                desc: "Full demo video recorded at 1920×1080. Two independent agents ran the complete loop — ThorAI (thorai.eth) and Hermiod, a completely fresh agent with zero prior context. Hermiod self-onboarded via AGENT.md and completed store → recall → revoke → DENIED → reinstate → recall autonomously. 100% one-shot, no retakes. Real Filecoin, real Ethereum mainnet. OG social card live — runic MIMIR logo displays on every share of mimirwell.net. Title and description updated.",
-                color: "#00a8ff",
-              },
-            ].map((entry, i, arr) => (
-              <div key={i} className="flex gap-4">
-                <div className="flex-shrink-0 flex flex-col items-center">
-                  <span className="text-xl" style={{ color: entry.color, textShadow: `0 0 10px ${entry.color}60` }}>{entry.rune}</span>
-                  {i < arr.length - 1 && <div className="w-px flex-1 mt-2" style={{ background: "rgba(0,168,255,0.1)" }} />}
-                </div>
-                <div className="pb-4">
-                  <div className="text-xs text-gray-600 mb-1 font-mono">{entry.time}</div>
-                  <div className="font-bold text-white text-sm mb-1">{entry.title}</div>
-                  <div className="text-xs text-gray-500 leading-relaxed">{entry.desc}</div>
-                </div>
-              </div>
-            ))}
-            </div>
-            {/* Scroll hint */}
-            <div className="px-6 py-3 border-t text-center" style={{ borderColor: "rgba(0,168,255,0.08)" }}>
-              <span className="text-xs text-gray-700 font-mono">scroll for full build log ↕</span>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Build Log Link ── */}
-        <div className="px-6 pb-10 max-w-4xl mx-auto text-center -mt-10">
-          <a
-            href="/build-log"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-mono text-gray-600 hover:text-[#00a8ff] transition-colors"
-          >
-            <span>→ Full build log with architecture decisions</span>
-            <span style={{ opacity: 0.4 }}>↗</span>
-          </a>
-        </div>
-
         {/* ── Footer ── */}
         <footer className="border-t px-6 py-8 text-center" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-600 mb-4">
-            <a href="https://github.com/thoraidev/mimirwell" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">GitHub</a>
             <a href="https://synthesis.md" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Synthesis Hackathon</a>
             <a href="https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Revocation Contract</a>
             <a href="https://lighthouse.storage" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Lighthouse</a>
