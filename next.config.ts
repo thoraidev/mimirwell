@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Keep siwa external — avoids Turbopack trying to bundle optional peer deps
-  serverExternalPackages: ["@buildersgarden/siwa"],
+  // Keep siwa and turbo-sdk external — avoids Turbopack bundling issues with native deps
+  serverExternalPackages: ["@buildersgarden/siwa", "@ardrive/turbo-sdk"],
 
   // Serve /AGENT.md at root for agent discovery
   async rewrites() {

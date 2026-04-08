@@ -9,8 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ardrive/turbo-sdk": "^1.41.0",
     "@buildersgarden/siwa": "^0.0.24",
-    "@lighthouse-web3/sdk": "^0.4.4",
     "@tanstack/react-query": "^5.90.21",
     "next": "16.1.6",
     "react": "19.2.3",
