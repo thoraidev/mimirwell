@@ -128,10 +128,10 @@ export default function MemoryCard({ cid, content, agentWallet, ownerWallet, sta
         </div>
       </div>
 
-      {/* CID */}
+      {/* Arweave txId (or legacy CID) */}
       {cid && (
         <div className="mb-3">
-          <div className="text-xs text-gray-500 mb-1">Filecoin CID</div>
+          <div className="text-xs text-gray-500 mb-1">Arweave ID</div>
           <button
             onClick={() => copyToClipboard(cid)}
             className="font-mono text-xs text-[#00a8ff]/70 hover:text-[#00a8ff] transition-colors break-all text-left"

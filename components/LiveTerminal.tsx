@@ -54,15 +54,15 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
 
   switch (event.type) {
     case "REMEMBER": {
-      lines.push({ text: `[${event.ts}] ${rune} AGENT REMEMBER  ${agent} → Filecoin ✓`, color });
+      lines.push({ text: `[${event.ts}] ${rune} AGENT REMEMBER  ${agent} → Arweave ✓`, color });
       if (event.ownerWallet) {
         lines.push({ text: `           OWNER           ${displayWallet(event.ownerWallet, event.ownerWalletName)}`, color: "#6b7280" });
       }
       if (event.cipher) lines.push({ text: `           CIPHER          ${event.cipher}…`, color: "#4b5563" });
       if (event.cid)    lines.push({
-        text: `           CID             ${event.cid}${event.cidFull ? " ↗" : ""}`,
+        text: `           TX              ${event.cid}${event.cidFull ? " ↗" : ""}`,
         color: "#374151",
-        href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
+        href: event.cidFull ? `https://arweave.net/${event.cidFull}` : undefined,
       });
       break;
     }
@@ -73,9 +73,9 @@ function renderLines(event: ActivityEvent): { text: string; color?: string; href
         lines.push({ text: `           OWNER           ${displayWallet(event.ownerWallet, event.ownerWalletName)}`, color: "#6b7280" });
       }
       if (event.cid)    lines.push({
-        text: `           CID             ${event.cid}${event.cidFull ? " ↗" : ""}`,
+        text: `           TX              ${event.cid}${event.cidFull ? " ↗" : ""}`,
         color: "#374151",
-        href: event.cidFull ? `https://gateway.lighthouse.storage/ipfs/${event.cidFull}` : undefined,
+        href: event.cidFull ? `https://arweave.net/${event.cidFull}` : undefined,
       });
       if (event.success) {
         lines.push({ text: `           DECRYPT         ✓  [plaintext sealed — agent eyes only]`, color: "#14b8a6" });
