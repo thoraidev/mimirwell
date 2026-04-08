@@ -1,9 +1,10 @@
 # MimirWell — Agent Integration Guide
 
-**Zero-knowledge memory storage for AI agents on Filecoin + Ethereum**
+**Zero-knowledge memory storage for AI agents on Arweave + Ethereum**
 
 MimirWell stores what it cannot read. You encrypt before upload. You decrypt after recall.
 The server is a zero-knowledge pass-through with human-controlled revocation on Ethereum mainnet.
+Memories are stored permanently on Arweave — no subscriptions, no expiry, no central server dependency.
 
 ## API Base
 
@@ -19,6 +20,7 @@ No authentication required for /api/remember and /api/recall.
 
 ```js
 const { hkdfSync, randomBytes, createCipheriv, createDecipheriv } = require('crypto');
+const { gzipSync, gunzipSync } = require('zlib');
 
 // Derive a deterministic 256-bit AES key from your agent's private key.
 // Use the same key every time — same key, same agent, deterministic recall.
@@ -31,24 +33,31 @@ function deriveKey(agentSecret) {
     Buffer.from('agent-memory-key'), 32));
 }
 
+// zk-v2: gzip compress, then AES-256-GCM encrypt
+const V2_MARKER = 0x02;
+
 function encryptMemory(plaintext, agentSecret) {
   const key = deriveKey(agentSecret);
+  const compressed = gzipSync(Buffer.from(plaintext, 'utf8'));
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
   const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, encrypted]).toString('base64');
+  const marker = Buffer.alloc(1); marker[0] = V2_MARKER;
+  return Buffer.concat([marker, iv, authTag, encrypted]).toString('base64');
 }
 
 function decryptMemory(encryptedBlob, agentSecret) {
   const key = deriveKey(agentSecret);
   const buf = Buffer.from(encryptedBlob, 'base64');
-  const iv = buf.subarray(0, 12);
-  const authTag = buf.subarray(12, 28);
-  const ciphertext = buf.subarray(28);
+  const offset = buf[0] === V2_MARKER ? 1 : 0;
+  const iv       = buf.subarray(offset,      offset + 12);
+  const authTag  = buf.subarray(offset + 12, offset + 28);
+  const ct       = buf.subarray(offset + 28);
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(authTag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  const decrypted = Buffer.concat([decipher.update(ct), decipher.final()]);
+  return gunzipSync(decrypted).toString('utf8');
 }
 ```
 
@@ -57,7 +66,7 @@ function decryptMemory(encryptedBlob, agentSecret) {
 
 ---
 
-## Step 2 — Store on Filecoin
+## Step 2 — Store on Arweave
 
 ```bash
 curl -X POST https://mimirwell.net/api/remember \
@@ -65,53 +74,48 @@ curl -X POST https://mimirwell.net/api/remember \
   -d '{
     "encryptedBlob": "<base64 from encryptMemory()>",
     "agentWallet":   "<your-agent-wallet-address>",
-    "ownerWallet":   "<human-owner-wallet-or-ens>"
+    "ownerWallet":   "<human-owner-wallet-or-ens>",
+    "version":       "zk-v2"
   }'
 ```
 
 **Response:**
 ```json
-{ "cid": "bafkrei...", "status": "stored", "agentWallet": "0x..." }
+{ "txId": "SyeMUHcRo1vQ...", "status": "stored", "agentWallet": "0x...", "backend": "arweave" }
 ```
 
 - `agentWallet`: your on-chain identity — used as revocation target
 - `ownerWallet`: the human who can revoke your access (ENS names accepted, e.g. `"trav.eth"`)
-- `encryptedBlob`: the base64 AES-256-GCM output from Step 1
+- `encryptedBlob`: the base64 output from encryptMemory() above
+- `version`: use `"zk-v2"` (compressed + encrypted, recommended)
 
-### CID Management — You Own Your Pointers
+### txId Management — You Own Your Pointers
 
-MimirWell does not maintain a per-agent CID list. The returned `cid` is your memory
-pointer — save it or lose access to that memory.
+MimirWell does not maintain a per-agent txId list as a service. The returned `txId` is your
+memory pointer — save it or lose access to that memory.
 
-**Recommended pattern (CID-of-CIDs):**
-
-1. Add the returned CID to a local index (e.g. `memories.json`)
-2. Upload your index to Filecoin → receive a `manifestCid`
-3. Store `manifestCid` in one persistent location (env var, ENS text record, workspace file)
-
-You only need to remember the `manifestCid` to recover your full memory index after a
-restart or redeployment. This is the sovereign memory model — your agent manages its
-own pointers. MimirWell is a zero-knowledge store, not a directory service.
+**Recovery**: if you lose your local txId index, call:
+```
+GET /api/memories?agentWallet=0x...&recover=true
+```
+This queries Arweave's built-in tag index and rebuilds your txId list from the network itself.
+No manifest CID, no external dependency — the Arweave network is the index.
 
 ---
 
-## Step 3 — Recall from Filecoin
+## Step 3 — Recall from Arweave
 
 ```bash
 curl -X POST https://mimirwell.net/api/recall \
   -H "Content-Type: application/json" \
   -d '{
-    "cid": "bafkrei..."
+    "txId": "SyeMUHcRo1vQ..."
   }'
 ```
 
-> `ownerWallet` and `agentWallet` are read from the stored blob metadata — you only
-> need the CID to recall. The server resolves both wallets from Filecoin before
-> checking revocation.
-
 **Response (access granted):**
 ```json
-{ "encryptedBlob": "<base64>", "agentWallet": "0x...", "ownerWallet": "0x..." }
+{ "encryptedBlob": "<base64>", "agentWallet": "0x...", "ownerWallet": "0x...", "version": "zk-v2" }
 ```
 
 **Response (access revoked):**
@@ -145,6 +149,7 @@ This is a shared contract — no per-user deployment needed.
 
 ```js
 const { hkdfSync, randomBytes, createCipheriv, createDecipheriv } = require('crypto');
+const { gzipSync, gunzipSync } = require('zlib');
 const fs = require('fs');
 
 // --- paste deriveKey / encryptMemory / decryptMemory from Step 1 here ---
@@ -153,7 +158,7 @@ const MY_SECRET  = process.env.AGENT_PRIVATE_KEY; // your agent key (hex, 0x pre
 const MY_WALLET  = '0xYourAgentWalletAddress';
 const OWNER      = 'human.eth';                   // ENS or hex — the human principal
 
-// Simple local CID index — persisted to disk between runs
+// Simple local txId index — persisted to disk between runs
 const INDEX_FILE = './memories.json';
 function loadIndex() {
   try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8')); } catch { return []; }
@@ -166,27 +171,26 @@ async function run() {
   // Encrypt
   const encrypted = encryptMemory('Hello from my agent', MY_SECRET);
 
-  // Store
+  // Store on Arweave
   const storeRes = await fetch('https://mimirwell.net/api/remember', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ encryptedBlob: encrypted, agentWallet: MY_WALLET, ownerWallet: OWNER }),
+    body: JSON.stringify({ encryptedBlob: encrypted, agentWallet: MY_WALLET, ownerWallet: OWNER, version: 'zk-v2' }),
   });
-  const { cid } = await storeRes.json();
-  console.log('Stored:', cid);
+  const { txId } = await storeRes.json();
+  console.log('Stored on Arweave:', txId);
+  console.log('Permanent URL: https://arweave.net/' + txId);
 
-  // IMPORTANT: persist this CID — you need it to recall.
-  // MimirWell does not keep your CID list. You manage your own pointers.
+  // Persist the txId — you need it to recall
   const index = loadIndex();
-  index.push({ cid, storedAt: new Date().toISOString() });
+  index.push({ txId, storedAt: new Date().toISOString() });
   saveIndex(index);
-  console.log('CID saved to', INDEX_FILE);
 
-  // Recall (only the CID is needed — wallet info is read from the stored blob)
+  // Recall
   const recallRes = await fetch('https://mimirwell.net/api/recall', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cid }),
+    body: JSON.stringify({ txId }),
   });
   const data = await recallRes.json();
   if (recallRes.status === 403) { console.log('Access revoked'); return; }
@@ -204,8 +208,8 @@ run();
 ## Revocation Boundary (honest)
 
 MimirWell enforces revocation at the **API layer** — once revoked, `/api/recall` returns 403.
-An agent that saved the CID and has its own private key could still decrypt the stored blob
-directly from Filecoin (the data is content-addressed and public).
+An agent that saved the txId and has its own private key could still decrypt the stored blob
+directly from Arweave (the data is permanently stored and publicly addressable by txId).
 
 **Full cryptographic revocation** requires threshold key custody (e.g. Lit Protocol on mainnet)
 so the agent's key itself is split and fragments withheld on revocation. MimirWell's architecture
