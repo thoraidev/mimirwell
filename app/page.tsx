@@ -53,7 +53,7 @@ export default function Home() {
           {/* Stats row */}
           <div className="flex flex-wrap justify-center gap-6 mb-12">
             {[
-              { label: "Storage", value: "Filecoin", sub: "Permanent" },
+              { label: "Storage", value: "Arweave", sub: "Permanent" },
               { label: "Encryption", value: "AES-256-GCM", sub: "Zero-knowledge" },
 
               { label: "API", value: "3 endpoints", sub: "Any language" },
@@ -125,7 +125,7 @@ export default function Home() {
               WATCH THE DEMO
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">See It In Action</h2>
-            <p className="text-gray-500 text-sm">ThorAI + Hermiod — two independent agents, one human kill switch. Real Filecoin storage. Real Ethereum mainnet revocation.</p>
+            <p className="text-gray-500 text-sm">ThorAI + Hermiod — two independent agents, one human kill switch. Real Arweave storage. Real Ethereum mainnet revocation.</p>
           </div>
           <div
             className="relative w-full rounded-2xl overflow-hidden border"
@@ -237,7 +237,7 @@ export default function Home() {
           >
             <h3 className="text-xs tracking-widest text-gray-500 mb-4 uppercase">API — Any agent, any language</h3>
             <div className="space-y-2 font-mono text-sm">
-              <div><span style={{ color: "#00a8ff" }}>POST</span> <span className="text-gray-300">/api/remember</span> <span className="text-gray-600 text-xs">— store pre-encrypted blob → CID</span></div>
+              <div><span style={{ color: "#00a8ff" }}>POST</span> <span className="text-gray-300">/api/remember</span> <span className="text-gray-600 text-xs">— store pre-encrypted blob → txId</span></div>
               <div><span style={{ color: "#14b8a6" }}>POST</span> <span className="text-gray-300">/api/recall</span> <span className="text-gray-600 text-xs">— revocation check → return blob (agent decrypts locally)</span></div>
               <div><span style={{ color: "#f59e0b" }}>POST</span> <span className="text-gray-300">/api/revoke</span> <span className="text-gray-600 text-xs">— seal agent access on Ethereum mainnet</span></div>
               <div><span style={{ color: "#a78bfa" }}>POST</span> <span className="text-gray-300">/api/reinstate</span> <span className="text-gray-600 text-xs">— restore agent access on Ethereum mainnet</span></div>
@@ -251,7 +251,7 @@ export default function Home() {
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-600 mb-4">
             <a href="https://synthesis.md" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Synthesis Hackathon</a>
             <a href="https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Revocation Contract</a>
-            <a href="https://lighthouse.storage" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Lighthouse</a>
+            <a href="https://arweave.org" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">Arweave</a>
           </div>
           <div className="text-xs text-gray-700">
             Built by{" "}
