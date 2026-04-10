@@ -16,12 +16,12 @@ MimirWell is an API for AI agents to store encrypted memories on Filecoin and re
 
 ```
 Agent (thorai.eth)
-  │  derives AES-256-GCM key from wallet signature (HKDF-SHA256)
-  │  encrypts memory locally — MimirWell never sees plaintext
+  │  derives AES-256-GCM key from private key (HKDF-SHA256)
+  │  gzip compresses, then encrypts locally — MimirWell never sees plaintext
   ▼
-POST /api/remember ──────────────────► Filecoin via Lighthouse
+POST /api/remember ──────────────────► Arweave (permanent, via Turbo)
                                               │
-                                         returns CID
+                                         returns txId
                                               │
 POST /api/recall  ◄───────────────────────────┘
   │  checks isRevoked(owner, agent) on Ethereum mainnet
@@ -42,28 +42,27 @@ MimirWell is zero-knowledge. It cannot read what it stores. Revocation is enforc
 > Agents encrypt locally before calling the API — see [AGENT.md](https://mimirwell.net/AGENT.md) for the complete integration including key derivation and encryption functions.
 
 ```bash
-# 1. Store an encrypted memory
+# 1. Store an encrypted memory (gzip + AES-256-GCM, max 90KB payload)
 curl -X POST https://mimirwell.net/api/remember \
   -H "Content-Type: application/json" \
   -d '{
     "encryptedBlob": "<base64-encrypted-content>",
     "agentWallet": "0x…or agent.eth",
-    "ownerWallet": "0x…or owner.eth"
+    "ownerWallet": "0x…or owner.eth",
+    "version": "zk-v2"
   }'
-# returns: { "cid": "bafkrei…" }
+# returns: { "txId": "SyeMUHcRo1vQ…", "status": "stored", "backend": "arweave" }
+# HTTP 413 if payload exceeds 90KB
 
 # 2. Recall it (403 if owner has revoked this agent)
 curl -X POST https://mimirwell.net/api/recall \
   -H "Content-Type: application/json" \
-  -d '{
-    "cid": "bafkrei…",
-    "ownerWallet": "0x…or owner.eth"
-  }'
-# returns: { "encryptedBlob": "…" } or 403 DENIED
+  -d '{"txId": "SyeMUHcRo1vQ…"}'
+# returns: { "encryptedBlob": "…", "version": "zk-v2" } or 403 DENIED
 
-# 3. Check revocation status on-chain
-curl "https://mimirwell.net/api/is-revoked?owner=0x…&agent=0x…"
-# returns: { "revoked": false }
+# 3. Recover txId list (if you lost your local index)
+curl "https://mimirwell.net/api/memories?agentWallet=0x…&recover=true"
+# queries Arweave tag index — no manifest CID needed
 ```
 
 ---
@@ -72,9 +71,11 @@ curl "https://mimirwell.net/api/is-revoked?owner=0x…&agent=0x…"
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/remember` | POST | Store encrypted blob on Filecoin, returns CID |
-| `/api/recall` | POST | Retrieve blob (403 if agent is revoked) |
-| `/api/is-revoked` | GET | Query on-chain revocation status |
+| `/api/remember` | POST | Store encrypted blob on Arweave, returns txId (HTTP 413 if > 90KB) |
+| `/api/recall` | POST | Retrieve blob by txId (403 if agent is revoked) |
+| `/api/memories` | GET | List txIds for an agent; `?recover=true` rebuilds from Arweave index |
+| `/api/revoke` | POST | Revoke agent access (agent-initiated) |
+| `/api/reinstate` | POST | Reinstate agent access |
 | `/api/agent-info` | GET | ThorAI's public agent wallet + ENS |
 | `/api/activity` | GET | Last 20 events (public activity log) |
 
@@ -127,7 +128,7 @@ MimirWell was built entirely during [The Synthesis](https://synthesis.md) — a 
 What was built during the hackathon:
 
 - **Smart contract** — designed, deployed, and verified on Ethereum mainnet
-- **Filecoin storage layer** — via Lighthouse SDK, permanent content-addressed storage
+- **Arweave storage layer** — via Turbo SDK, permanent content-addressed storage
 - **Zero-knowledge encryption architecture** — agent-side AES-256-GCM, HKDF-SHA256 key derivation
 - **REST API** — 5 endpoints, Railway deployment, Railway persistent volume for activity log
 - **Live demo frontend** — real-time activity terminal, ENS name resolution, on-chain revocation badge
@@ -138,9 +139,9 @@ What was built during the hackathon:
 
 ## Known Limitations
 
-1. **Revocation is API-layer enforced.** The server checks `isRevoked()` before returning blobs. An agent with a saved CID and their own encryption key can decrypt without going through MimirWell. Full cryptographic revocation requires threshold key custody (Lit Protocol mainnet) — this is the named production upgrade path.
+1. **Revocation is API-layer enforced.** The server checks `isRevoked()` before returning blobs. An agent with a saved txId and their own private key could decrypt directly from Arweave (the data is permanently stored and publicly addressable). Full cryptographic revocation requires threshold key custody (Lit Protocol mainnet) — this is the named production upgrade path. For most agent use cases, API-layer enforcement is sufficient.
 
-2. **No rate limiting.** The API is open. Lighthouse storage costs are real.
+2. **No rate limiting.** The API is open.
 
 ---
 

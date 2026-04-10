@@ -33,7 +33,9 @@ function deriveKey(agentSecret) {
     Buffer.from('agent-memory-key'), 32));
 }
 
-// zk-v2: gzip compress, then AES-256-GCM encrypt
+// zk-v2: gzip compress first, then AES-256-GCM encrypt.
+// Compression is part of the zk-v2 format — always compress before encrypting.
+// A typical agent memory file compresses to well under the 90KB upload limit.
 const V2_MARKER = 0x02;
 
 function encryptMemory(plaintext, agentSecret) {
@@ -59,6 +61,32 @@ function decryptMemory(encryptedBlob, agentSecret) {
   const decrypted = Buffer.concat([decipher.update(ct), decipher.final()]);
   return gunzipSync(decrypted).toString('utf8');
 }
+
+// Hard limit: 90KB for the full upload payload (encryptedBlob + JSON envelope).
+// The server enforces this and returns HTTP 413 on violation.
+// Call checkSize() before /api/remember to fail fast locally.
+//
+// Measurement mirrors the server exactly:
+//   Buffer.byteLength(JSON.stringify(fullBlob), 'utf8')
+const MAX_BLOB_BYTES = 90_000;
+
+function checkSize(encryptedBlob, agentWallet, ownerWallet) {
+  const mockBlob = JSON.stringify({
+    encryptedBlob,
+    agentWallet: agentWallet ?? '0x0000000000000000000000000000000000000000',
+    ownerWallet: ownerWallet ?? '0x0000000000000000000000000000000000000000',
+    timestamp: Date.now(),
+    version: 'zk-v2',
+  });
+  const bytes = Buffer.byteLength(mockBlob, 'utf8');
+  if (bytes > MAX_BLOB_BYTES) {
+    throw new Error(
+      `Memory too large: ${bytes} bytes exceeds 90KB limit. ` +
+      'Summarise or chunk your memory before storing.'
+    );
+  }
+  return bytes;
+}
 ```
 
 > **agentSecret**: your agent's Ethereum private key (hex with 0x prefix). Used only for
@@ -67,6 +95,10 @@ function decryptMemory(encryptedBlob, agentSecret) {
 ---
 
 ## Step 2 — Store on Arweave
+
+> **90KB hard limit.** The server measures `Buffer.byteLength(JSON.stringify(fullPayload), 'utf8')` and
+> returns HTTP 413 if it exceeds 90,000 bytes. Always call `checkSize()` before sending — fail locally,
+> not over the wire. If your memory is too large, summarise or split it into chunks.
 
 ```bash
 curl -X POST https://mimirwell.net/api/remember \
@@ -79,15 +111,21 @@ curl -X POST https://mimirwell.net/api/remember \
   }'
 ```
 
-**Response:**
+**Response (success):**
 ```json
 { "txId": "SyeMUHcRo1vQ...", "status": "stored", "agentWallet": "0x...", "backend": "arweave" }
+```
+
+**Response (too large):**
+```json
+{ "error": "Blob too large: 97430 bytes (max 90000). Use compressAndEncryptMemory() (zk-v2) to stay under the limit." }
+// HTTP 413
 ```
 
 - `agentWallet`: your on-chain identity — used as revocation target
 - `ownerWallet`: the human who can revoke your access (ENS names accepted, e.g. `"trav.eth"`)
 - `encryptedBlob`: the base64 output from encryptMemory() above
-- `version`: use `"zk-v2"` (compressed + encrypted, recommended)
+- `version`: use `"zk-v2"` (compressed + encrypted, required)
 
 ### txId Management — You Own Your Pointers
 
@@ -170,6 +208,9 @@ function saveIndex(entries) {
 async function run() {
   // Encrypt
   const encrypted = encryptMemory('Hello from my agent', MY_SECRET);
+
+  // Guard: fail fast before hitting the network
+  checkSize(encrypted, MY_WALLET, OWNER);
 
   // Store on Arweave
   const storeRes = await fetch('https://mimirwell.net/api/remember', {
