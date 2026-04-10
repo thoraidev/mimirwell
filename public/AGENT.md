@@ -4,7 +4,8 @@
 
 MimirWell stores what it cannot read. You encrypt before upload. You decrypt after recall.
 The server is a zero-knowledge pass-through with human-controlled revocation on Ethereum mainnet.
-Memories are stored permanently on Arweave — no subscriptions, no expiry, no central server dependency.
+
+**Data permanence:** Memories are stored permanently on Arweave. There is no expiry, no renewal, no host that can delete them. MimirWell's API is a convenience layer — the Arweave network is the source of truth.
 
 ## API Base
 
@@ -139,6 +140,40 @@ GET /api/memories?agentWallet=0x...&recover=true
 This queries Arweave's built-in tag index and rebuilds your txId list from the network itself.
 No manifest CID, no external dependency — the Arweave network is the index.
 
+### Independent Recovery — No MimirWell Required
+
+`/api/memories?recover=true` is a convenience wrapper around an Arweave GraphQL query.
+If MimirWell is unavailable — for any reason, including permanently — you can query Arweave
+directly and recover every txId ever stored under your wallet.
+
+Every MimirWell upload is tagged with `App-Name: MimirWell` and `Agent-Wallet: <your address>`.
+Those tags are indexed by the Arweave network and are queryable forever.
+
+```graphql
+# Query arweave.net/graphql directly — no MimirWell dependency
+{
+  transactions(
+    tags: [
+      { name: "App-Name",     values: ["MimirWell"] },
+      { name: "Agent-Wallet", values: ["0xYourAgentWalletAddress"] }
+    ]
+    first: 100
+    sort: HEIGHT_DESC
+  ) {
+    edges {
+      node {
+        id
+        tags { name value }
+        block { timestamp }
+      }
+    }
+  }
+}
+```
+
+Fetch the blob for any txId directly from `https://arweave.net/<txId>` and decrypt locally.
+Your memories are not hostage to this service.
+
 ---
 
 ## Step 3 — Recall from Arweave
@@ -246,17 +281,34 @@ run();
 
 ---
 
-## Revocation Boundary (honest)
+## Trust Model
 
-MimirWell enforces revocation at the **API layer** — once revoked, `/api/recall` returns 403.
-An agent that saved the txId and has its own private key could still decrypt the stored blob
-directly from Arweave (the data is permanently stored and publicly addressable by txId).
+These are the security properties of MimirWell, stated plainly:
+
+**Zero-knowledge storage.** MimirWell never sees plaintext. Encryption happens in your process
+before the request is sent. The server stores and returns only ciphertext.
+
+**Encryption as authentication.** Your agent's private key is the only path to decryption.
+There is no MimirWell account, no password reset, no recovery via support ticket. If you lose
+your key, you lose access to your memories. The key never leaves your process.
+
+**Revocation is API-layer enforced.** Once revoked, `/api/recall` returns 403 and the blob
+is never returned. However, an agent that saved the txId and retains its private key could
+decrypt the blob directly from Arweave — the data is permanently stored and publicly addressable.
+MimirWell cannot delete what is on Arweave.
 
 **Full cryptographic revocation** requires threshold key custody (e.g. Lit Protocol on mainnet)
-so the agent's key itself is split and fragments withheld on revocation. MimirWell's architecture
-is designed as a drop-in upgrade path for this — the API contract is identical.
+so the agent's key itself is split and fragments are withheld on revocation. MimirWell's
+architecture is designed as a drop-in upgrade path — the API contract is identical. For most
+agent use cases, API-layer enforcement is sufficient.
 
-For most agent use cases, API-layer revocation is sufficient.
+**Permanence vs revocation tradeoff.** These two properties are in tension by design. Arweave
+makes memories permanent and uncensorable. Ethereum revocation makes access controllable by
+humans. MimirWell enforces revocation at the API layer — the honest boundary between the two.
+
+**Data survives MimirWell.** If this service disappears, your memories remain on Arweave,
+indexed by your agent wallet, and recoverable via direct GraphQL query. See
+[Independent Recovery](#independent-recovery--no-mimirwell-required) above.
 
 ---
 
