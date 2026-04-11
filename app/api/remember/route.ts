@@ -10,10 +10,19 @@
  * calling this endpoint. gzip + AES-256-GCM keeps blobs under 90 KB, which
  * qualifies for Arweave Turbo's permanent free storage threshold (100 KiB).
  *
+ * ─── Two integration paths ───────────────────────────────────────────────────
+ * Sovereign storage (default): omit ownerWallet entirely.
+ *   - Pure permanent storage. No revocation. No Ethereum dependency.
+ *   - Agent can retrieve directly from arweave.net/<txId> forever.
+ *
+ * Storage with human oversight: include ownerWallet.
+ *   - Human principal can call revoke(agentAddress) on the Ethereum contract.
+ *   - /api/recall enforces revocation by checking the contract before returning.
+ *
  * Body: {
  *   encryptedBlob: string   // base64 AES-256-GCM blob from agent-crypto.ts
- *   ownerWallet:   string   // hex address or ENS name (revocation authority)
  *   agentWallet?:  string   // hex address or ENS name (defaults to ThorAI's wallet)
+ *   ownerWallet?:  string   // hex address or ENS name — opt-in human oversight
  *   version?:      string   // "zk-v1" or "zk-v2" (default: "zk-v2")
  * }
  *
@@ -53,25 +62,26 @@ export async function POST(req: NextRequest) {
     if (!encryptedBlob || typeof encryptedBlob !== "string") {
       return NextResponse.json({ error: "encryptedBlob is required" }, { status: 400 });
     }
-    if (!rawOwner || typeof rawOwner !== "string") {
-      return NextResponse.json({ error: "ownerWallet is required" }, { status: 400 });
-    }
 
     // Resolve ENS names → hex addresses
-    const ownerAddress = await resolveAddress(rawOwner);
-    const agentAddress = rawAgent ? await resolveAddress(rawAgent) : getAgentAddress();
+    // ownerWallet is optional — omitting it selects sovereign storage (no revocation)
+    const ownerAddress: string | null = rawOwner ? await resolveAddress(rawOwner) : null;
+    const agentAddress: string = (rawAgent ? await resolveAddress(rawAgent) : null) ?? getAgentAddress();
 
     // Default to zk-v2 for new uploads
     const version = rawVersion ?? "zk-v2";
 
     // Build storage blob — zero-knowledge: only encrypted content stored
-    const blob = {
+    // ownerWallet omitted when not provided — sovereign storage path
+    const blob: Record<string, unknown> = {
       encryptedBlob,
       agentWallet: agentAddress.toLowerCase(),
-      ownerWallet: ownerAddress.toLowerCase(),
       timestamp: Date.now(),
       version,
     };
+    if (ownerAddress) {
+      blob.ownerWallet = ownerAddress.toLowerCase();
+    }
 
     // Guard: reject if blob exceeds the Arweave free-tier threshold before uploading
     const approxSize = Buffer.byteLength(JSON.stringify(blob), "utf8");
@@ -92,7 +102,7 @@ export async function POST(req: NextRequest) {
     registerTxId({
       txId,
       agentWallet: agentAddress,
-      ownerWallet: ownerAddress,
+      ownerWallet: ownerAddress ?? undefined,
       timestamp: Date.now(),
       preview: "[encrypted]",
     });
@@ -100,7 +110,7 @@ export async function POST(req: NextRequest) {
     // Log to activity feed
     logRemember({
       agentWallet: agentAddress,
-      ownerWallet: ownerAddress,
+      ownerWallet: ownerAddress ?? undefined,
       cid: txId, // activity-log field named "cid" for historical compat
       ciphertext: encryptedBlob,
     });
@@ -111,6 +121,8 @@ export async function POST(req: NextRequest) {
       agentWallet: agentAddress,
       status: "stored",
       backend: "arweave",
+      // Indicate which path was used
+      oversight: ownerAddress ? true : false,
     });
   } catch (err) {
     console.error("[/api/remember] Error:", err);

@@ -82,7 +82,7 @@ function shortId(): string {
 
 export function logRemember(opts: {
   agentWallet: string;
-  ownerWallet: string;
+  ownerWallet?: string;
   cid: string;
   ciphertext: string;
 }) {
@@ -93,8 +93,8 @@ export function logRemember(opts: {
     type: 'REMEMBER',
     agentWallet: truncateWallet(opts.agentWallet),
     agentWalletFull: opts.agentWallet,
-    ownerWallet: truncateWallet(opts.ownerWallet),
-    ownerWalletFull: opts.ownerWallet,
+    ownerWallet: truncateWallet(opts.ownerWallet ?? ''),
+    ownerWalletFull: opts.ownerWallet ?? '',
     cid: truncateCid(opts.cid),
     cidFull: opts.cid,
     cipher: opts.ciphertext.slice(0, 48),
@@ -120,8 +120,8 @@ export function logRecall(opts: {
     agentWallet: truncateWallet(opts.agentWallet),
     agentWalletFull: opts.agentWallet,
     ...(opts.ownerWallet ? {
-      ownerWallet: truncateWallet(opts.ownerWallet),
-      ownerWalletFull: opts.ownerWallet,
+      ownerWallet: truncateWallet(opts.ownerWallet ?? ''),
+      ownerWalletFull: opts.ownerWallet ?? '',
     } : {}),
     cid: truncateCid(opts.cid),
     cidFull: opts.cid,
@@ -144,8 +144,8 @@ export function logRevoke(opts: {
     type: 'REVOKE',
     agentWallet: truncateWallet(opts.agentWallet),
     agentWalletFull: opts.agentWallet,
-    ownerWallet: truncateWallet(opts.ownerWallet),
-    ownerWalletFull: opts.ownerWallet,
+    ownerWallet: truncateWallet(opts.ownerWallet ?? ''),
+    ownerWalletFull: opts.ownerWallet ?? '',
     txHash: opts.txHash
       ? opts.txHash.slice(0, 10) + '…' + opts.txHash.slice(-6)
       : undefined,
@@ -168,8 +168,8 @@ export function logReinstate(opts: {
     type: 'REINSTATED',
     agentWallet: truncateWallet(opts.agentWallet),
     agentWalletFull: opts.agentWallet,
-    ownerWallet: truncateWallet(opts.ownerWallet),
-    ownerWalletFull: opts.ownerWallet,
+    ownerWallet: truncateWallet(opts.ownerWallet ?? ''),
+    ownerWalletFull: opts.ownerWallet ?? '',
     txHash: opts.txHash
       ? opts.txHash.slice(0, 10) + '…' + opts.txHash.slice(-6)
       : undefined,

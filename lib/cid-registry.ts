@@ -22,7 +22,7 @@ export interface TxEntry {
   /** Arweave txId (new) or legacy Filecoin IPFS CID — opaque storage identifier */
   txId: string;
   agentWallet: string;
-  ownerWallet: string;
+  ownerWallet?: string;
   timestamp: number;
   storedAt: string;
   preview: string;
@@ -88,7 +88,7 @@ export function markRevoked(agentWallet: string, ownerWallet: string): void {
   registry.entries.forEach((e) => {
     if (
       lower(e.agentWallet) === lower(agentWallet) &&
-      lower(e.ownerWallet) === lower(ownerWallet)
+      lower(e.ownerWallet ?? '') === lower(ownerWallet)
     ) {
       e.status = "revoked";
     }
@@ -100,7 +100,7 @@ export function listTxIds(agentWallet?: string, ownerWallet?: string): TxEntry[]
   const registry = readRegistry();
   return registry.entries.filter((e) => {
     if (agentWallet && e.agentWallet.toLowerCase() !== agentWallet.toLowerCase()) return false;
-    if (ownerWallet && e.ownerWallet.toLowerCase() !== ownerWallet.toLowerCase()) return false;
+    if (ownerWallet && (e.ownerWallet ?? '').toLowerCase() !== ownerWallet.toLowerCase()) return false;
     return true;
   });
 }

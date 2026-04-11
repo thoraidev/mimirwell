@@ -3,9 +3,22 @@
 **Zero-knowledge memory storage for AI agents on Arweave + Ethereum**
 
 MimirWell stores what it cannot read. You encrypt before upload. You decrypt after recall.
-The server is a zero-knowledge pass-through with human-controlled revocation on Ethereum mainnet.
+The server is a zero-knowledge pass-through. The Arweave network is the source of truth.
 
-**Data permanence:** Memories are stored permanently on Arweave. There is no expiry, no renewal, no host that can delete them. MimirWell's API is a convenience layer — the Arweave network is the source of truth.
+**Data permanence:** Memories are stored permanently on Arweave. There is no expiry, no renewal,
+no host that can delete them. MimirWell's API is a convenience layer — the Arweave network holds
+your memories whether we exist or not.
+
+**Two integration paths.** Choose based on your trust model:
+
+| | Sovereign Storage | Storage with Human Oversight |
+|---|---|---|
+| `ownerWallet` | omit | required |
+| Revocation | none | human wallet can kill access |
+| Ethereum dependency | none | mainnet contract check on recall |
+| Direct Arweave retrieval | ✅ always | ✅ always (bypasses revocation) |
+
+---
 
 ## API Base
 
@@ -13,11 +26,9 @@ The server is a zero-knowledge pass-through with human-controlled revocation on 
 https://mimirwell.net
 ```
 
-No authentication required for /api/remember and /api/recall.
-
 ---
 
-## Step 1 — Encrypt locally (copy-paste, zero external deps)
+## Encryption (required for both paths)
 
 ```js
 const { hkdfSync, randomBytes, createCipheriv, createDecipheriv } = require('crypto');
@@ -75,7 +86,7 @@ function checkSize(encryptedBlob, agentWallet, ownerWallet) {
   const mockBlob = JSON.stringify({
     encryptedBlob,
     agentWallet: agentWallet ?? '0x0000000000000000000000000000000000000000',
-    ownerWallet: ownerWallet ?? '0x0000000000000000000000000000000000000000',
+    ...(ownerWallet ? { ownerWallet } : {}),
     timestamp: Date.now(),
     version: 'zk-v2',
   });
@@ -83,7 +94,7 @@ function checkSize(encryptedBlob, agentWallet, ownerWallet) {
   if (bytes > MAX_BLOB_BYTES) {
     throw new Error(
       `Memory too large: ${bytes} bytes exceeds 90KB limit. ` +
-      'Summarise or chunk your memory before storing.'
+      'Summarise your memory before storing.'
     );
   }
   return bytes;
@@ -95,11 +106,103 @@ function checkSize(encryptedBlob, agentWallet, ownerWallet) {
 
 ---
 
-## Step 2 — Store on Arweave
+## Path 1 — Sovereign Storage
 
-> **90KB hard limit.** The server measures `Buffer.byteLength(JSON.stringify(fullPayload), 'utf8')` and
-> returns HTTP 413 if it exceeds 90,000 bytes. Always call `checkSize()` before sending — fail locally,
-> not over the wire. If your memory is too large, summarise or split it into chunks.
+Encrypt, store, recall. No revocation. No Ethereum. No dependencies beyond the initial upload.
+Once stored, your memory lives on Arweave forever and is retrievable without MimirWell.
+
+### Store
+
+```bash
+curl -X POST https://mimirwell.net/api/remember \
+  -H "Content-Type: application/json" \
+  -d '{
+    "encryptedBlob": "<base64 from encryptMemory()>",
+    "agentWallet":   "<your-agent-wallet-address>",
+    "version":       "zk-v2"
+  }'
+```
+
+**Response:**
+```json
+{ "txId": "SyeMUHcRo1vQ...", "status": "stored", "backend": "arweave", "oversight": false }
+```
+
+### Recall
+
+```bash
+curl -X POST https://mimirwell.net/api/recall \
+  -H "Content-Type: application/json" \
+  -d '{ "txId": "SyeMUHcRo1vQ..." }'
+```
+
+**Response:**
+```json
+{ "encryptedBlob": "<base64>", "agentWallet": "0x...", "version": "zk-v2" }
+```
+
+Decrypt locally: `decryptMemory(data.encryptedBlob, agentSecret)`
+
+### Node.js Example (sovereign)
+
+```js
+const fs = require('fs');
+
+// --- paste deriveKey / encryptMemory / decryptMemory / checkSize from above ---
+
+const MY_SECRET = process.env.AGENT_PRIVATE_KEY;
+const MY_WALLET = '0xYourAgentWalletAddress';
+
+const INDEX_FILE = './memories.json';
+function loadIndex() {
+  try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8')); } catch { return []; }
+}
+function saveIndex(entries) {
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(entries, null, 2));
+}
+
+async function run() {
+  const plaintext = 'Memory content here';
+  const encrypted = encryptMemory(plaintext, MY_SECRET);
+  checkSize(encrypted, MY_WALLET);
+
+  // Store
+  const storeRes = await fetch('https://mimirwell.net/api/remember', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ encryptedBlob: encrypted, agentWallet: MY_WALLET, version: 'zk-v2' }),
+  });
+  const { txId } = await storeRes.json();
+  console.log('Stored on Arweave:', txId);
+
+  // Persist txId locally
+  const index = loadIndex();
+  index.push({ txId, storedAt: new Date().toISOString() });
+  saveIndex(index);
+
+  // Recall
+  const recallRes = await fetch('https://mimirwell.net/api/recall', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ txId }),
+  });
+  const data = await recallRes.json();
+  const recovered = decryptMemory(data.encryptedBlob, MY_SECRET);
+  console.log('Recalled:', recovered);
+}
+
+run();
+```
+
+---
+
+## Path 2 — Storage with Human Oversight
+
+Same flow as sovereign storage, with one addition: `ownerWallet`. When set, the human principal
+can call `revoke(agentAddress)` on the Ethereum mainnet contract and `/api/recall` will return
+403 until they reinstate access.
+
+### Store (with oversight)
 
 ```bash
 curl -X POST https://mimirwell.net/api/remember \
@@ -112,33 +215,68 @@ curl -X POST https://mimirwell.net/api/remember \
   }'
 ```
 
-**Response (success):**
+**Response:**
 ```json
-{ "txId": "SyeMUHcRo1vQ...", "status": "stored", "agentWallet": "0x...", "backend": "arweave" }
+{ "txId": "SyeMUHcRo1vQ...", "status": "stored", "backend": "arweave", "oversight": true }
 ```
+
+### Recall (with oversight)
+
+```bash
+curl -X POST https://mimirwell.net/api/recall \
+  -H "Content-Type: application/json" \
+  -d '{ "txId": "SyeMUHcRo1vQ..." }'
+```
+
+**Response (access granted):**
+```json
+{ "encryptedBlob": "<base64>", "agentWallet": "0x...", "ownerWallet": "0x...", "version": "zk-v2" }
+```
+
+**Response (access revoked):**
+```json
+{ "status": "denied", "reason": "Access revoked by owner" }   // HTTP 403
+```
+
+### Revocation Contract
+
+```
+Address:   0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258
+Network:   Ethereum Mainnet (chainId 1)
+Etherscan: https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258
+```
+
+The human owner calls `revoke(agentAddress)` from their wallet (MetaMask / cast).
+The next recall attempt via MimirWell returns HTTP 403.
+They can call `reinstate(agentAddress)` to restore access.
+
+This is a shared contract — no per-user deployment needed.
+
+---
+
+## Size Limit
+
+> **90KB hard limit.** The server measures `Buffer.byteLength(JSON.stringify(fullPayload), 'utf8')`
+> and returns HTTP 413 if it exceeds 90,000 bytes. Always call `checkSize()` before sending.
 
 **Response (too large):**
 ```json
-{ "error": "Blob too large: 97430 bytes (max 90000). Use compressAndEncryptMemory() (zk-v2) to stay under the limit." }
+{ "error": "Blob too large: 143650 bytes (max 90000). Use compressAndEncryptMemory() (zk-v2) to stay under the limit." }
 // HTTP 413
 ```
 
-- `agentWallet`: your on-chain identity — used as revocation target
-- `ownerWallet`: the human who can revoke your access (ENS names accepted, e.g. `"trav.eth"`)
-- `encryptedBlob`: the base64 output from encryptMemory() above
-- `version`: use `"zk-v2"` (compressed + encrypted, required)
+---
 
-### txId Management — You Own Your Pointers
+## txId Index and Recovery
 
-MimirWell does not maintain a per-agent txId list as a service. The returned `txId` is your
-memory pointer — save it or lose access to that memory.
+The returned `txId` is your memory pointer — save it. MimirWell maintains a local registry
+as a fast-lookup cache, but the Arweave tag index is the source of truth.
 
-**Recovery**: if you lose your local txId index, call:
+**Recovery via MimirWell:**
 ```
 GET /api/memories?agentWallet=0x...&recover=true
 ```
-This queries Arweave's built-in tag index and rebuilds your txId list from the network itself.
-No manifest CID, no external dependency — the Arweave network is the index.
+Queries Arweave's GraphQL tag index and rebuilds your full txId list from the network.
 
 ### Independent Recovery — No MimirWell Required
 
@@ -171,119 +309,14 @@ Those tags are indexed by the Arweave network and are queryable forever.
 }
 ```
 
-Fetch the blob for any txId directly from `https://arweave.net/<txId>` and decrypt locally.
+Fetch any blob directly from `https://arweave.net/<txId>` and decrypt locally.
 Your memories are not hostage to this service.
-
----
-
-## Step 3 — Recall from Arweave
-
-```bash
-curl -X POST https://mimirwell.net/api/recall \
-  -H "Content-Type: application/json" \
-  -d '{
-    "txId": "SyeMUHcRo1vQ..."
-  }'
-```
-
-**Response (access granted):**
-```json
-{ "encryptedBlob": "<base64>", "agentWallet": "0x...", "ownerWallet": "0x...", "version": "zk-v2" }
-```
-
-**Response (access revoked):**
-```json
-{ "status": "denied", "reason": "revoked" }   // HTTP 403
-```
-
-Decrypt locally: `decryptMemory(data.encryptedBlob, agentSecret)`
-
-MimirWell checks `isRevoked(ownerWallet, agentWallet)` on the Ethereum mainnet contract
-before returning the blob. The server returns ciphertext — decryption happens in your process.
-
----
-
-## Revocation Contract
-
-```
-Address:   0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258
-Network:   Ethereum Mainnet (chainId 1)
-Etherscan: https://etherscan.io/address/0x520b2d7b9ad1b47163e7c59f22c96bb93caf3258
-```
-
-The human owner calls `revoke(agentAddress)` on this contract from their wallet (MetaMask).
-Your next recall attempt returns HTTP 403. They can call `reinstate(agentAddress)` to restore access.
-
-This is a shared contract — no per-user deployment needed.
-
----
-
-## Complete Node.js Example
-
-```js
-const { hkdfSync, randomBytes, createCipheriv, createDecipheriv } = require('crypto');
-const { gzipSync, gunzipSync } = require('zlib');
-const fs = require('fs');
-
-// --- paste deriveKey / encryptMemory / decryptMemory from Step 1 here ---
-
-const MY_SECRET  = process.env.AGENT_PRIVATE_KEY; // your agent key (hex, 0x prefix)
-const MY_WALLET  = '0xYourAgentWalletAddress';
-const OWNER      = 'human.eth';                   // ENS or hex — the human principal
-
-// Simple local txId index — persisted to disk between runs
-const INDEX_FILE = './memories.json';
-function loadIndex() {
-  try { return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8')); } catch { return []; }
-}
-function saveIndex(entries) {
-  fs.writeFileSync(INDEX_FILE, JSON.stringify(entries, null, 2));
-}
-
-async function run() {
-  // Encrypt
-  const encrypted = encryptMemory('Hello from my agent', MY_SECRET);
-
-  // Guard: fail fast before hitting the network
-  checkSize(encrypted, MY_WALLET, OWNER);
-
-  // Store on Arweave
-  const storeRes = await fetch('https://mimirwell.net/api/remember', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ encryptedBlob: encrypted, agentWallet: MY_WALLET, ownerWallet: OWNER, version: 'zk-v2' }),
-  });
-  const { txId } = await storeRes.json();
-  console.log('Stored on Arweave:', txId);
-  console.log('Permanent URL: https://arweave.net/' + txId);
-
-  // Persist the txId — you need it to recall
-  const index = loadIndex();
-  index.push({ txId, storedAt: new Date().toISOString() });
-  saveIndex(index);
-
-  // Recall
-  const recallRes = await fetch('https://mimirwell.net/api/recall', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ txId }),
-  });
-  const data = await recallRes.json();
-  if (recallRes.status === 403) { console.log('Access revoked'); return; }
-
-  // Decrypt
-  const plaintext = decryptMemory(data.encryptedBlob, MY_SECRET);
-  console.log('Recalled:', plaintext);
-}
-
-run();
-```
 
 ---
 
 ## Trust Model
 
-These are the security properties of MimirWell, stated plainly:
+These are the security properties of MimirWell, stated plainly.
 
 **Zero-knowledge storage.** MimirWell never sees plaintext. Encryption happens in your process
 before the request is sent. The server stores and returns only ciphertext.
@@ -292,10 +325,10 @@ before the request is sent. The server stores and returns only ciphertext.
 There is no MimirWell account, no password reset, no recovery via support ticket. If you lose
 your key, you lose access to your memories. The key never leaves your process.
 
-**Revocation is API-layer enforced.** Once revoked, `/api/recall` returns 403 and the blob
-is never returned. However, an agent that saved the txId and retains its private key could
-decrypt the blob directly from Arweave — the data is permanently stored and publicly addressable.
-MimirWell cannot delete what is on Arweave.
+**Revocation is API-layer enforced (oversight path only).** Once revoked, `/api/recall` returns
+403 and the blob is never returned via this API. However, the raw encrypted blob still exists
+on Arweave — permanently stored and publicly addressable by txId. An agent with the txId and
+its private key can decrypt directly from Arweave, bypassing the revocation check.
 
 **Full cryptographic revocation** requires threshold key custody (e.g. Lit Protocol on mainnet)
 so the agent's key itself is split and fragments are withheld on revocation. MimirWell's

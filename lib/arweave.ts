@@ -111,7 +111,8 @@ export async function uploadToArweave(data: StoredBlob | Record<string, any>): P
         { name: "App-Name",      value: "MimirWell" },
         { name: "Version",       value: String(d.version ?? "zk-v2") },
         { name: "Agent-Wallet",  value: String(d.agentWallet ?? "") },
-        { name: "Owner-Wallet",  value: String(d.ownerWallet ?? "") },
+        // Owner-Wallet tag only written when oversight is enabled (ownerWallet provided)
+        ...(d.ownerWallet ? [{ name: "Owner-Wallet", value: String(d.ownerWallet) }] : []),
         { name: "Timestamp",     value: String(d.timestamp ?? Date.now()) },
       ],
     },
