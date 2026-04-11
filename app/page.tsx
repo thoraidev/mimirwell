@@ -46,8 +46,10 @@ export default function Home() {
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
             Your agent encrypts locally.{" "}
             <span style={{ color: "#00a8ff" }}>We store what we can&apos;t read.</span>{" "}
-            You hold the{" "}
-            <span style={{ color: "#14b8a6" }}>kill switch.</span>
+            <span style={{ color: "#14b8a6" }}>Permanent on Arweave.</span>
+          </p>
+          <p className="text-sm text-gray-600 max-w-xl mx-auto -mt-6 mb-10">
+            MimirWell is a convenience layer. Your memories live on Arweave and can be retrieved directly without us.
           </p>
 
           {/* Stats row */}
@@ -133,7 +135,7 @@ export default function Home() {
           >
             <iframe
               src="https://www.youtube.com/embed/xLJbCK6eBJU"
-              title="MimirWell Demo — Zero-Knowledge Agent Memory on Filecoin + Ethereum"
+              title="MimirWell Demo — Zero-Knowledge Agent Memory on Arweave + Ethereum"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               className="absolute inset-0 w-full h-full"
@@ -161,6 +163,11 @@ export default function Home() {
             {/* Left: Demo Panel */}
             <div className="lg:col-span-2">
               <DemoPanel />
+              <p className="text-xs text-gray-600 mt-3 leading-relaxed px-1">
+                This demo uses the <span style={{ color: "#f59e0b" }}>oversight path</span> — your connected wallet becomes the owner with revocation rights.
+                The <span style={{ color: "#14b8a6" }}>sovereign path</span> (no ownerWallet) is available via direct API — see{" "}
+                <a href="/AGENT.md" target="_blank" style={{ color: "#00a8ff" }} className="hover:opacity-80">AGENT.md</a>.
+              </p>
             </div>
 
             {/* Right: Live Terminal */}
@@ -191,28 +198,22 @@ export default function Home() {
             <p className="text-gray-500 text-sm">Three layers. No single point of failure.</p>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-4">
+          {/* Sovereign path — the default */}
+          <div className="grid sm:grid-cols-2 gap-4 mb-6">
             {[
               {
                 rune: "ᚠ",
                 step: "01",
                 title: "Agent encrypts locally",
-                desc: "Your agent derives an AES-256-GCM key from its wallet signature. Memory is encrypted before the API call. MimirWell receives only ciphertext — never plaintext.",
+                desc: "Your agent derives an AES-256-GCM key from its private key. Memory is compressed and encrypted before the API call. MimirWell receives only ciphertext — never plaintext.",
                 color: "#00a8ff",
               },
               {
                 rune: "ᛖ",
                 step: "02",
-                title: "Agent recalls memory",
-                desc: "MimirWell checks revocation on Ethereum mainnet, then returns the encrypted blob. The agent decrypts locally. The server is a zero-knowledge pass-through.",
+                title: "Stored permanently on Arweave",
+                desc: "The encrypted blob is pinned to Arweave and tagged with your agent wallet. You get a txId back. Recall it via MimirWell or fetch it directly from arweave.net — forever.",
                 color: "#14b8a6",
-              },
-              {
-                rune: "ᛉ",
-                step: "03",
-                title: "Human holds the kill switch",
-                desc: "One MetaMask transaction calls revoke() on Ethereum mainnet. The next recall returns 403. Reinstate restores access. You are always in control.",
-                color: "#f59e0b",
               },
             ].map((item) => (
               <div
@@ -230,6 +231,26 @@ export default function Home() {
             ))}
           </div>
 
+          {/* Optional oversight path */}
+          <div
+            className="rounded-xl border p-6"
+            style={{ borderColor: "rgba(245,158,11,0.2)", background: "rgba(245,158,11,0.04)" }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl" style={{ color: "#f59e0b", textShadow: "0 0 15px rgba(245,158,11,0.5)" }}>ᛉ</span>
+              <div>
+                <div className="text-xs tracking-widest mb-0.5" style={{ color: "#f59e0b" }}>OPTIONAL — HUMAN OVERSIGHT</div>
+                <h3 className="font-bold text-white text-sm">Add an ownerWallet to get a kill switch</h3>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Pass <span className="font-mono" style={{ color: "#f59e0b" }}>ownerWallet</span> on the store call and a human principal can call{" "}
+              <span className="font-mono" style={{ color: "#f59e0b" }}>revoke()</span> on Ethereum mainnet at any time.
+              The next recall returns 403. <span className="font-mono" style={{ color: "#f59e0b" }}>reinstate()</span> restores access.
+              One contract, shared by all agents and owners — no deployment needed.
+            </p>
+          </div>
+
           {/* API reference */}
           <div
             className="mt-8 rounded-xl border p-6"
@@ -238,7 +259,7 @@ export default function Home() {
             <h3 className="text-xs tracking-widest text-gray-500 mb-4 uppercase">API — Any agent, any language</h3>
             <div className="space-y-2 font-mono text-sm">
               <div><span style={{ color: "#00a8ff" }}>POST</span> <span className="text-gray-300">/api/remember</span> <span className="text-gray-600 text-xs">— store pre-encrypted blob → txId</span></div>
-              <div><span style={{ color: "#14b8a6" }}>POST</span> <span className="text-gray-300">/api/recall</span> <span className="text-gray-600 text-xs">— revocation check → return blob (agent decrypts locally)</span></div>
+              <div><span style={{ color: "#14b8a6" }}>POST</span> <span className="text-gray-300">/api/recall</span> <span className="text-gray-600 text-xs">— return encrypted blob (revocation check only if oversight enabled)</span></div>
               <div><span style={{ color: "#f59e0b" }}>POST</span> <span className="text-gray-300">/api/revoke</span> <span className="text-gray-600 text-xs">— seal agent access on Ethereum mainnet</span></div>
               <div><span style={{ color: "#a78bfa" }}>POST</span> <span className="text-gray-300">/api/reinstate</span> <span className="text-gray-600 text-xs">— restore agent access on Ethereum mainnet</span></div>
               <div><span style={{ color: "#6b7280" }}>GET</span> <span className="text-gray-300">/api/activity</span> <span className="text-gray-600 text-xs">— last 20 operations (no auth, nothing sensitive)</span></div>
