@@ -106,6 +106,79 @@ function checkSize(encryptedBlob, agentWallet, ownerWallet) {
 
 ---
 
+## Key Management
+
+### Use your existing wallet — no new key needed
+
+If your agent already has an Ethereum wallet (Bankr, Coinbase Agent Kit, any wallet-based
+framework), use that private key as `agentSecret`. No new key to generate, no new storage to
+secure. Your operational wallet is your memory key.
+
+```js
+// Already running a wallet-based agent? Just pass the key you have.
+const encrypted = encryptMemory(plaintext, process.env.AGENT_PRIVATE_KEY);
+```
+
+### How to store the key in production
+
+Store the key in your platform's encrypted secret store — never anywhere else:
+
+- **Railway:** Environment Variables panel (encrypted at rest, injected at runtime)
+- **AWS:** Secrets Manager or Parameter Store (SecureString)
+- **Fly.io:** `fly secrets set AGENT_PRIVATE_KEY=0x...`
+- **Docker/k8s:** Mounted secrets, not environment variables baked into the image
+
+**Three things that actually compromise keys in practice — never do these:**
+
+1. **Never commit the key to git.** Not in `.env`, not in `.env.local`, not commented out.
+   Add `*.env*` to `.gitignore` and treat a committed key as rotated.
+2. **Never log it.** No `console.log(process.env.AGENT_PRIVATE_KEY)`, no debug dumps,
+   no error traces that include env vars.
+3. **Never send it over the network.** The key signs locally. It never leaves the process.
+   If your code path sends the key anywhere — to MimirWell or anyone else — that is a bug.
+
+### Pattern 2 (sign → HKDF) is preferred — here's why it matters
+
+The reference implementation in this guide derives the AES key directly from the raw private key
+bytes. A cleaner pattern signs a deterministic message first, then runs HKDF on the signature:
+
+```js
+// Pattern 1 — raw key → HKDF (works, but requires raw key access)
+const key = deriveKey(rawPrivateKey);
+
+// Pattern 2 — sign → HKDF (preferred)
+const signature = await wallet.signMessage("MimirWell agent key derivation v1 — sign to derive your memory encryption key");
+const key = deriveKeyFromSignature(signature);
+```
+
+The reason to prefer Pattern 2: **hardware wallets, MPC wallets, and custodial services will
+sign messages but will not expose the raw private key.** Pattern 1 requires raw key access.
+Pattern 2 works with any wallet that can sign — including Ledger, Fireblocks, or any MPC
+custody solution. If you want your agent to integrate with those providers, build on Pattern 2.
+
+### Key rotation = memory loss. Read this before building your ops playbook.
+
+Your key is your memory. The encryption is deterministic — the same key always produces the
+same AES-256-GCM key, and only that key can decrypt memories stored with it.
+
+**If you rotate your agent's private key, you lose access to all previously stored memories.
+There is no recovery path. MimirWell cannot help. The memories exist on Arweave permanently
+but are unreadable without the original key.**
+
+The safe rotation procedure, if you must rotate:
+
+1. Recall every stored memory using the old key
+2. Decrypt each blob locally
+3. Re-encrypt each blob under the new key
+4. Store the new blobs via `/api/remember` (new txIds)
+5. Update your txId index
+6. Only then rotate the key
+
+For most agents, the right answer is: **don't rotate.** Use a key that is itself stored in a
+hardware wallet or MPC system, so the key never needs to move — only signatures do.
+
+---
+
 ## Path 1 — Sovereign Storage
 
 Encrypt, store, recall. No revocation. No Ethereum. No dependencies beyond the initial upload.
