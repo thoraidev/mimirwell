@@ -43,7 +43,7 @@ const publicClient = createPublicClient({
   transport: fallback([
     http("https://ethereum-rpc.publicnode.com"),
     http("https://cloudflare-eth.com"),
-    http("https://eth.llamarpc.com"),
+    http("https://rpc.ankr.com/eth"),
   ]),
 });
 

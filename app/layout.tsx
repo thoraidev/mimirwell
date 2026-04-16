@@ -4,11 +4,11 @@ import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "MimirWell — Sovereign Encrypted Memory for AI Agents",
-  description: "Zero-knowledge memory on Filecoin + Ethereum. Your agent encrypts. We store what we can't read. You hold the kill switch.",
-  keywords: ["AI agents", "Filecoin", "encrypted memory", "zero-knowledge", "sovereign data", "Web3", "Ethereum", "AES-256-GCM"],
+  description: "Zero-knowledge memory on Arweave + Ethereum. Your agent encrypts. We store what we can't read. You hold the kill switch.",
+  keywords: ["AI agents", "Arweave", "encrypted memory", "zero-knowledge", "sovereign data", "Web3", "Ethereum", "AES-256-GCM"],
   openGraph: {
     title: "MimirWell — Sovereign Encrypted Memory for AI Agents",
-    description: "Zero-knowledge memory on Filecoin + Ethereum. Your agent encrypts. We store what we can't read. You hold the kill switch.",
+    description: "Zero-knowledge memory on Arweave + Ethereum. Your agent encrypts. We store what we can't read. You hold the kill switch.",
     type: "website",
     url: "https://mimirwell.net",
     siteName: "MimirWell",
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "MimirWell — Sovereign Encrypted Memory for AI Agents",
-    description: "Zero-knowledge memory on Filecoin + Ethereum. Your agent encrypts. We store what we can't read. You hold the kill switch.",
+    description: "Zero-knowledge memory on Arweave + Ethereum. Your agent encrypts. We store what we can't read. You hold the kill switch.",
     images: ["https://mimirwell.net/og-image.jpg"],
   },
 };
