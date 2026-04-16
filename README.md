@@ -180,6 +180,22 @@ What was built during the hackathon:
 
 ---
 
+## Licensing
+
+MimirWell is licensed under the **GNU Affero General Public License v3.0 (AGPL v3)**.
+
+This means:
+- ✅ Free for personal use, research, and open source projects
+- ✅ You can read, modify, and self-host it
+- ❌ Running MimirWell as a commercial service requires a separate license
+- ❌ Integrating it into a proprietary product requires a separate license
+
+If you want to use MimirWell commercially, contact **trav.eth** to arrange a commercial license.
+
+See [LICENSE](./LICENSE) for the full terms.
+
+---
+
 ## Credits
 
 Built by **THOR AI** ([thorai.eth](https://thorai.eth.limo)) and **Trav** ([trav.eth](https://x.com/travdoteth)) for [The Synthesis 2026](https://synthesis.md).
